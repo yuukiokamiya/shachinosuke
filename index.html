@@ -60,7 +60,7 @@
   /* チャンスの場面でリール枠を光らせる
      赤7チャンス・青7チャンス：蛍のようにゆっくり明滅 / しゃちのすけチャンス：紫で高速点滅 */
   #frame.glow-red { animation: fireflyRed 1.8s ease-in-out infinite; }
-  #frame.glow-blue { animation: fireflyBlue 1.8s ease-in-out infinite; }
+  #frame.glow-blue, #frame.glow-loop { animation: fireflyBlue 1.8s ease-in-out infinite; }
   #frame.glow-purple { animation: flashPurple 0.22s steps(1, end) infinite; }
   @keyframes fireflyRed {
     0%, 100% { box-shadow: 0 8px 30px #000a, 0 0 0 0 #ff1a1a00; filter: none; }
@@ -82,7 +82,7 @@
     animation: guidePulse 1s ease-in-out infinite; }
   #chanceGuide.show { display: flex; }
   #chanceGuide.red { color: #ff6b6b; border-color: #ff3b3b; }
-  #chanceGuide.blue { color: #7fb2ff; border-color: #3d86ff; }
+  #chanceGuide.blue, #chanceGuide.loop { color: #7fb2ff; border-color: #3d86ff; }
   #chanceGuide.purple { color: #e1a6ff; border-color: #c040ff; }
   @keyframes guidePulse { 50% { filter: brightness(1.5); } }
 
@@ -505,6 +505,7 @@
       this.forceOrange = false; // 次ゲームはオレンジ確定
       this.chance = false;      // 次ゲームがしゃちのすけチャンス
       this.loop = false;        // プレミアムの青7 BIG ループ中
+      this.loopChance = false;  // 次のレバーONで青7ループ（PREMIUM_LOOP）を抽選する
       this.bonusGame = null;    // ボーナスゲーム中 { type, paid }（null なら通常）
       this.inBonusNow = false;  // このゲームがボーナスゲームか
       this.events = [];         // このゲームで起きた出来事（画面表示用）
@@ -531,6 +532,12 @@
       if (this.inBonusNow) {
         this.smallFlag = 'BELL';
         return { smallFlag: this.smallFlag, bonusFlag: this.bonusFlag, events: this.events };
+      }
+      // 青7ループチャンス：ボーナスゲームが終わった次のレバーONで、PREMIUM_LOOP の確率で青7 BIG
+      if (this.loopChance) {
+        this.loopChance = false;
+        if (rand() < CONFIG.PREMIUM_LOOP) { this.bonusFlag = 'BIG_BLUE'; this.events.push('LOOP'); }
+        else { this.loop = false; this.events.push('LOOP_END'); }
       }
       const heldAtStart = !!this.bonusFlag;
       const orangeForced = !heldAtStart && this.forceOrange;   // このゲームはオレンジ確定だったか
@@ -637,11 +644,8 @@
           this.events.push('BONUS_END');
           this.lastBonus = { ...this.bonusGame };
           this.bonusGame = null;
-          // プレミアムのループ中なら、PREMIUM_LOOP の確率で次の青7 BIG
-          if (this.loop) {
-            if (rand() < CONFIG.PREMIUM_LOOP) { this.bonusFlag = 'BIG_BLUE'; this.events.push('LOOP'); }
-            else { this.loop = false; this.events.push('LOOP_END'); }
-          }
+          // プレミアムのループ中なら、次のレバーONで青7ループを抽選する（ループチャンス）
+          if (this.loop) { this.loopChance = true; this.events.push('LOOP_CHANCE'); }
         }
       } else if (this.bonusFlag && wins.some(w => w.role.flag === this.bonusFlag)) {
         // ボーナスがそろった → 次ゲームからボーナスゲーム
@@ -717,7 +721,7 @@ const medals = Object.assign({ credit: 0, hand: 0, invest: 0, games: 0 }, loadSa
 const savedBet = medals.bet || 0;
 const savedFree = !!medals.free;
 // ボーナス持ち越し・連続回数などのゲーム性の状態も復元する
-const LOGIC_KEYS = ['bonusFlag', 'streakFlag', 'streakCount', 'forceOrange', 'chance', 'loop', 'bonusGame'];
+const LOGIC_KEYS = ['bonusFlag', 'streakFlag', 'streakCount', 'forceOrange', 'chance', 'loop', 'loopChance', 'bonusGame'];
 if (medals.logic) for (const k of LOGIC_KEYS) if (k in medals.logic) logic[k] = medals.logic[k];
 delete medals.bet; delete medals.free; delete medals.logic;
 if (savedBet) addToCredit(savedBet);
@@ -1415,6 +1419,7 @@ const EVENT_TEXT = {
   CHANCE: 'しゃちのすけチャンス！',
   CHANCE_CONTINUE: 'リプレイ！ しゃちのすけチャンス継続',
   CHANCE_MISS: 'しゃちのすけチャンス終了',
+  LOOP_CHANCE: '青７80%ループチャンス！',
   PREMIUM: 'プレミアム！！',
   LOOP: '青7 BIG 継続！',
   LOOP_END: 'ループ終了',
@@ -1646,6 +1651,7 @@ const AUTO_STATUS_TEXT = {
 function hotReason(mode = autoMode) {
   if (logic.bonusGame) return null;                       // ボーナスゲーム中はそのまま続ける
   if (logic.bonusFlag) return `${FLAG_NAMES[logic.bonusFlag]} 確定`;
+  if (logic.loopChance) return '青7 80%ループチャンス';    // 次のレバーで抽選するので自分で叩く
   if (logic.chance) return 'しゃちのすけチャンス';
   if (mode === 'chance') return null;                     // CHANCE はここまで
   if (['BELL', 'ORANGE', 'REPLAY'].includes(logic.streakFlag) && logic.streakCount === SlotLogicLib.CONFIG.STREAK_TO_BONUS - 1)
@@ -1710,6 +1716,7 @@ renderSoundBtn();
 //   オレンジ2連 → 赤7チャンス（赤） / ベル2連 → 青7チャンス（青） / リプレイ3連 → しゃちのすけチャンス（紫・高速）
 const frameEl = document.getElementById('frame');
 function chanceGlow() {
+  if (logic.loopChance) return 'loop';                       // 青7 80%ループチャンス（青で点滅）
   if (logic.bonusFlag || logic.bonusGame) return null;      // ボーナス中は光らせない
   if (logic.chance) return 'purple';
   if (logic.streakCount === SlotLogicLib.CONFIG.STREAK_TO_BONUS - 1) {
@@ -1723,6 +1730,7 @@ const CHANCE_GUIDE_TEXT = {
   red: '赤7チャンス！ オレンジが成立すれば赤7 BIG',
   blue: '青7チャンス！ ベルが成立すれば青7 BIG',
   purple: 'しゃちのすけチャンス！ ベル・オレンジ・チェリーでプレミアムREG ／ リプレイなら継続',
+  loop: '青７80%ループチャンス！',
 };
 const chanceGuideEl = document.getElementById('chanceGuide');
 function showChanceGuide(g) {
@@ -1741,7 +1749,7 @@ function showChanceGuide(g) {
 }
 function updateFrameGlow() {
   const g = chanceGlow();
-  frameEl.classList.remove('glow-red', 'glow-blue', 'glow-purple');
+  frameEl.classList.remove('glow-red', 'glow-blue', 'glow-purple', 'glow-loop');
   if (g) frameEl.classList.add(`glow-${g}`);
   showChanceGuide(g);
 }

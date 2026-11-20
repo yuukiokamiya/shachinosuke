@@ -84,6 +84,13 @@
 
   /* オートプレイボタン（レバーの横に小さく） */
   #leverBox { gap: 10px; }
+  #autoBtns { display: flex; flex-direction: column; gap: 6px; }
+  #chanceBtn { width: clamp(40px, 6vh, 52px); height: clamp(28px, 4vh, 34px); border-radius: 14px; border: 2px solid #777;
+    background: #333; color: #aaa; font-weight: bold; font-size: clamp(8px, 1.2vh, 10px); padding: 0; }
+  #chanceBtn.on { background: radial-gradient(circle at 40% 35%, #e1bee7, #8e24aa); color: #fff; border-color: #e1bee7;
+    animation: chanceBlink 1s infinite; }
+  #chanceBtn.pressed { transform: translateY(2px); }
+  @keyframes chanceBlink { 50% { box-shadow: 0 0 14px #ce93d8; } }
   #autoBtn { width: clamp(40px, 6vh, 52px); height: clamp(40px, 6vh, 52px); border-radius: 50%; border: 2px solid #777;
     background: #333; color: #aaa; font-weight: bold; font-size: clamp(10px, 1.5vh, 13px); padding: 0; }
   #autoBtn.on { background: radial-gradient(circle at 40% 35%, #b9f6ca, #00c853); color: #003d16; border-color: #b9f6ca;
@@ -104,7 +111,9 @@
   .stop.pressed { transform: translateY(4px); box-shadow: 0 1px 0 #33363a, 0 3px 6px #0009; }
   #panel { width: var(--W); display: flex; justify-content: space-between; align-items: center;
     background: #000; border-radius: 10px; padding: 10px 16px; font-size: clamp(14px, 2.2vw, 22px); }
-  #result { font-weight: bold; color: #ffd84a; min-height: 1.3em; }
+  /* 結果欄：改行せず1行に収める（長いときは文字を自動で小さくする） */
+  #result { font-weight: bold; color: #ffd84a; min-height: 1.3em; flex: 1; min-width: 0;
+    text-align: right; white-space: nowrap; overflow: hidden; }
   #debug { color: #8fd; font-size: 0.8em; text-align: right; }
   #frame { background: linear-gradient(#c9a640, #8a6a16); padding: 12px; border-radius: 16px; box-shadow: 0 8px 30px #000a; }
   #reels { display: block; height: var(--H); width: calc(var(--H) * 1.37); background: #222; border-radius: 6px; }
@@ -177,7 +186,10 @@
     <div id="frame"><canvas id="reels"></canvas><div id="cutin"><img alt=""></div></div>
     <div id="leverBox">
       <button id="lever" aria-label="レバー"><span class="lv-base"></span><span class="lv-arm"><span class="lv-knob"></span></span></button>
-      <button id="autoBtn" aria-label="オートプレイ">AUTO</button>
+      <div id="autoBtns">
+        <button id="autoBtn" aria-label="熱い場面までオートプレイ">AUTO</button>
+        <button id="chanceBtn" aria-label="しゃちのすけチャンスまでオートプレイ">CHANCE</button>
+      </div>
     </div>
     <div id="stops">
       <button class="stop" data-reel="0" aria-label="左停止"></button>
@@ -232,8 +244,8 @@
     { id: 'BIG_F',  flag: 'BIG_BLUE', name: '青7 BIG BONUS', pat: ['F', 'F', 'F'], pay: 0 },
     { id: 'REG',    flag: 'REG',    name: 'REGULAR BONUS', pat: ['X', 'X', 'X'], pay: 0 },
     { id: 'REPLAY', flag: 'REPLAY', name: 'リプレイ',       pat: ['RW', 'R', 'R'], pay: 0 },
-    { id: 'BELL',   flag: 'BELL',   name: 'ベル',           pat: ['B', 'B', 'B'], pay: 6 },
-    { id: 'ORANGE', flag: 'ORANGE', name: 'オレンジ',       pat: ['O', 'O', 'O'], pay: 10 },
+    { id: 'BELL',   flag: 'BELL',   name: 'ベル',           pat: ['B', 'B', 'B'], pay: 1 },
+    { id: 'ORANGE', flag: 'ORANGE', name: 'オレンジ',       pat: ['O', 'O', 'O'], pay: 1 },
     { id: 'CHERRY', flag: 'CHERRY', name: 'チェリー',       pat: ['CP', '*', '*'], pay: 1 },
     // ボーナス中専用役（通常時は絶対にそろえない）
     { id: 'B_FOW',  flag: 'BONUS_ONLY', name: '青7-オレンジ-ブルー', pat: ['F', 'O', 'W'], pay: 15 },
@@ -265,17 +277,18 @@
   const BONUS_FLAGS = ['BIG_BLUE', 'BIG_RED', 'REG'];
   const CHANCE_ROLES = ['BELL', 'ORANGE', 'CHERRY'];  // チャンス中にプレミアムになる小役
   // 調整用の数値（ここを変えるとゲームバランスが変わる）
-  //  今の値で機械割 約102%（完璧な目押し）、ボーナス合算 約1/36 になるよう調整済み
+  //  今の値で機械割 約102%（完璧な目押し）になるよう調整済み
   const CONFIG = {
     STREAK_TO_BONUS: 3,     // 同じ小役が何ゲーム連続で成立したら発動するか
-    CHERRY_TO_ORANGE: 0.75, // チェリー成立 → 次ゲームがオレンジになる確率
-    ORANGE_CHAIN: 0.7,      // オレンジ成立 → 次ゲームもオレンジになる確率
+    CHERRY_TO_ORANGE: 0.73, // チェリー成立 → 次ゲームがオレンジになる確率
+    ORANGE_CHAIN: 0.68,     // オレンジ成立 → 次ゲームもオレンジになる確率
     PREMIUM_LOOP: 0.8,      // プレミアム後、ボーナスが終わるたびに青7 BIG が続く確率
     // ボーナスゲーム：毎ゲームベルが成立して BONUS_PAY 枚。払い出しの合計が END を「超えたら」終了
-    //  BIG_END 15 → 15枚×2ゲーム＝30枚（純増24枚）、REG_END 10 → 15枚×1ゲーム（純増12枚）
+    //  BIG_END 90 → 15枚×7ゲーム＝105枚（純増84枚）、REG_END 45 → 15枚×4ゲーム＝60枚（純増48枚）
+    //  通常時のベル・オレンジは1枚なので、出玉の大半はボーナスから
     BONUS_PAY: 15,
-    BIG_END: 15,
-    REG_END: 10,
+    BIG_END: 90,
+    REG_END: 45,
     // カットイン：小役が2連続した次のゲームのレバーONで抽選。割合は [なし, 弱, 強, 確定]
     CUTIN_HIT:  [1, 2, 5, 7],   // そのゲームで3連続が成立したとき
     CUTIN_MISS: [10, 4, 1, 0],  // 3連続が成立しなかったとき
@@ -579,6 +592,17 @@ const logic = new SlotLogic();
 const canvas = document.getElementById('reels');
 const ctx = canvas.getContext('2d');
 const resultEl = document.getElementById('result');
+// 結果欄の文字が1行に収まらないときは、収まるまで文字を小さくする
+function fitResult() {
+  resultEl.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(resultEl).fontSize);
+  while (resultEl.scrollWidth > resultEl.clientWidth && size > 8) {
+    size -= 1;
+    resultEl.style.fontSize = `${size}px`;
+  }
+}
+new MutationObserver(fitResult).observe(resultEl, { childList: true, characterData: true, subtree: true });
+window.addEventListener('resize', fitResult);
 const stopBtns = [...document.querySelectorAll('.stop')];
 const leverBtn = document.getElementById('lever');
 
@@ -1255,8 +1279,16 @@ const BONUS_SPEECH = {
   REG: 'ＢＡＲを狙うんす',
 };
 
+// ボーナスを狙うセリフの文字色（青7=青、赤7=赤、BAR=紫）。それ以外は通常の色
+const BONUS_SPEECH_COLOR = { BIG_BLUE: '#1565ff', BIG_RED: '#e00000', REG: '#8e24aa' };
+function speechColor(text) {
+  const key = Object.keys(BONUS_SPEECH).find(k => BONUS_SPEECH[k] === text);
+  return key ? BONUS_SPEECH_COLOR[key] : '';
+}
+
 function showSpeech(text) {
   bubbleEl.textContent = text;
+  bubbleEl.style.color = speechColor(text);
   bubbleEl.classList.remove('pop');
   void bubbleEl.offsetWidth;          // アニメーションをやり直すため
   bubbleEl.classList.add('pop');
@@ -1411,33 +1443,39 @@ function bindPress(el, fn) {
 bindPress(leverBtn, pullLever);
 
 // ---- オートプレイ ----
-//  熱い場面（次のレバーONが楽しみな状態）になるまで、レバーと停止を自動で繰り返す。
-//  熱い場面：小役2連 / チェリー成立 / しゃちのすけチャンス / ボーナス確定。止まったら次のレバーは自分で。
+//  レバーと停止を自動で繰り返し、決めた場面になったら次のレバーの前で止まる。
+//   AUTO  （'hot'）  ：熱い場面まで（小役2連 / チェリー成立 / しゃちのすけチャンス / ボーナス確定）
+//   CHANCE（'chance'）：しゃちのすけチャンス（プレミアム REG＝BAR を狙えるゲーム）まで。ボーナス確定でも止まる
 const AUTO_STOP_GAP = 180;   // 停止ボタンを押す間隔（ミリ秒）
 const AUTO_GAME_GAP = 250;   // 次のゲームまでの間（ミリ秒）
 const autoBtn = document.getElementById('autoBtn');
-let autoMode = false, autoRunning = false;
+const chanceBtn = document.getElementById('chanceBtn');
+let autoMode = null, autoRunning = false;   // autoMode: null / 'hot' / 'chance'
 
-// 今の状態が「熱い場面」なら理由を返す
-function hotReason() {
+// 今の状態で止まるべきなら理由を返す
+function hotReason(mode = autoMode) {
   if (logic.bonusGame) return null;                       // ボーナスゲーム中はそのまま続ける
   if (logic.bonusFlag) return `${FLAG_NAMES[logic.bonusFlag]} 確定`;
   if (logic.chance) return 'しゃちのすけチャンス';
+  if (mode === 'chance') return null;                     // CHANCE はここまで
   if (['BELL', 'ORANGE', 'REPLAY'].includes(logic.streakFlag) && logic.streakCount === SlotLogicLib.CONFIG.STREAK_TO_BONUS - 1)
     return `${FLAG_NAMES[logic.streakFlag]}${logic.streakCount}連`;
   if (gameInfo && gameInfo.smallFlag === 'CHERRY' && !logic.inBonusNow) return 'チェリー';
   return null;
 }
 
-function setAuto(on) {
-  if (on && logic.bonusFlag) { resultEl.textContent = 'ボーナスは自分で狙うんす（AUTOは使えません）'; on = false; }
-  autoMode = on;
-  autoBtn.classList.toggle('on', on);
-  if (on) autoLoop();
+function setAuto(mode) {
+  if (mode && logic.bonusFlag) { resultEl.textContent = 'ボーナスは自分で狙うんす（AUTOは使えません）'; mode = null; }
+  autoMode = mode || null;
+  autoBtn.classList.toggle('on', autoMode === 'hot');
+  chanceBtn.classList.toggle('on', autoMode === 'chance');
+  if (autoMode) autoLoop();
 }
+// ボタン：同じボタンをもう一度押すと止まる。もう片方を押すとそちらに切り替わる
+const toggleAuto = mode => setAuto(autoMode === mode ? null : mode);
 
 function stopAuto(reason) {
-  setAuto(false);
+  setAuto(null);
   resultEl.textContent = [resultEl.textContent, `AUTO停止：${reason}`].filter(Boolean).join(' / ');
 }
 
@@ -1462,7 +1500,8 @@ async function autoLoop() {
     autoRunning = false;
   }
 }
-bindPress(autoBtn, () => setAuto(!autoMode));
+bindPress(autoBtn, () => toggleAuto('hot'));
+bindPress(chanceBtn, () => toggleAuto('chance'));
 bindPress(lendBtn, lend);
 bindPress(settleBtn, settle);
 // 音のオンオフ（状態はブラウザに保存）
@@ -1477,7 +1516,8 @@ window.addEventListener('keydown', e => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
   if (k === ' ' || k === 'enter' || k === 'arrowup') { e.preventDefault(); pullLever(); }
-  else if (k === 'a') setAuto(!autoMode);
+  else if (k === 'a') toggleAuto('hot');
+  else if (k === 's') toggleAuto('chance');
   else if (k === 'z' || k === 'arrowleft') pressStop(0);
   else if (k === 'x' || k === 'arrowdown') pressStop(1);
   else if (k === 'c' || k === 'arrowright') pressStop(2);
@@ -1487,7 +1527,10 @@ window.addEventListener('resize', resize);
 resize();
 creditCounter.jump(medals.credit);   // 起動時は回さずに表示
 renderMedals();
-if (logic.bonusFlag) bubbleEl.textContent = BONUS_SPEECH[logic.bonusFlag];   // 持ち越し中なら狙う図柄を表示
+if (logic.bonusFlag) {   // 持ち越し中なら狙う図柄を表示
+  bubbleEl.textContent = BONUS_SPEECH[logic.bonusFlag];
+  bubbleEl.style.color = speechColor(bubbleEl.textContent);
+}
 updatePaytableHighlight();
 resultEl.textContent = medals.credit + medals.hand >= BET_MAX
   ? 'レバーで開始' : '貸出ボタンでメダルを借りてください';

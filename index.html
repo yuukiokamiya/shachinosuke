@@ -50,6 +50,26 @@
     filter: drop-shadow(0 6px 12px #000a); visibility: hidden; }
   #chara.ready { visibility: visible; }
 
+  /* 説明のスクロール表示（リール枠の上の縁） */
+  #ticker { position: absolute; left: 12px; right: 12px; top: -10px; height: 22px; overflow: hidden; z-index: 6;
+    background: #000d; border: 1px solid #c9a640; border-radius: 12px; pointer-events: none; }
+  #ticker.hidden { display: none; }
+  #tickerText { position: absolute; left: 0; top: 50%; transform: translateY(-50%); white-space: nowrap;
+    color: #ffd84a; font-weight: bold; font-size: 14px; line-height: 1; }
+
+  /* スランプグラフ */
+  #graphModal { position: fixed; inset: 0; background: #000b; display: none; align-items: center; justify-content: center; z-index: 50; }
+  #graphModal.open { display: flex; }
+  .graph-box { width: min(92vw, 860px); background: #1a1a19; color: #f0efec; border: 2px solid #c9a640; border-radius: 12px;
+    padding: 12px 16px; box-shadow: 0 10px 40px #000c; }
+  .graph-head, .graph-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 16px; }
+  .graph-head span { font-weight: bold; }
+  .graph-foot { color: #c3c2b7; font-size: 14px; margin-top: 6px; }
+  .graph-wrap { position: relative; margin-top: 8px; }
+  #graphCanvas { display: block; width: 100%; height: min(55vh, 380px); touch-action: none; }
+  #graphTip { position: absolute; pointer-events: none; display: none; background: #2a2a28; color: #f0efec; font-size: 13px;
+    padding: 4px 8px; border-radius: 6px; border: 1px solid #555; white-space: nowrap; }
+
   /* 配当表（左の列の上） */
   #paytable { width: 100%; margin-bottom: auto; display: flex; flex-direction: column; gap: calc(var(--H) * 0.006);
     font-size: calc(var(--H) * 0.036); }
@@ -161,6 +181,8 @@
         <button class="small" id="lendBtn">貸出 50枚</button>
         <button class="small" id="settleBtn">精算</button>
         <button class="small" id="soundBtn" aria-label="音のオンオフ">🔊</button>
+        <button class="small" id="graphBtn" aria-label="スランプグラフ">📈</button>
+        <button class="small" id="tickerBtn" aria-label="説明のスクロール表示のオンオフ">ℹ</button>
       </div>
     </div>
   </div>
@@ -183,7 +205,8 @@
       <div id="bubble">しょうちのすけ</div>
       <img id="chara" alt="しゃちのすけ">
     </div>
-    <div id="frame"><canvas id="reels"></canvas><div id="cutin"><img alt=""></div></div>
+    <div id="frame"><canvas id="reels"></canvas><div id="cutin"><img alt=""></div>
+      <div id="ticker"><span id="tickerText"></span></div></div>
     <div id="leverBox">
       <button id="lever" aria-label="レバー"><span class="lv-base"></span><span class="lv-arm"><span class="lv-knob"></span></span></button>
       <div id="autoBtns">
@@ -195,6 +218,21 @@
       <button class="stop" data-reel="0" aria-label="左停止"></button>
       <button class="stop" data-reel="1" aria-label="中停止"></button>
       <button class="stop" data-reel="2" aria-label="右停止"></button>
+    </div>
+  </div>
+</div>
+
+<!-- スランプグラフ（📈ボタンで開く） -->
+<div id="graphModal" role="dialog" aria-label="スランプグラフ">
+  <div class="graph-box">
+    <div class="graph-head">
+      <span>スランプグラフ（10Gごとの差枚）</span>
+      <button class="small" id="graphClose" aria-label="閉じる">✕</button>
+    </div>
+    <div class="graph-wrap"><canvas id="graphCanvas"></canvas><div id="graphTip"></div></div>
+    <div class="graph-foot">
+      <span id="graphSummary"></span>
+      <button class="small" id="graphReset">記録をリセット</button>
     </div>
   </div>
 </div>
@@ -1384,6 +1422,7 @@ function onAllStopped() {
   speakAfterGame();
   updatePaytableHighlight();
   bet = replayBet ? BET_MAX : 0;
+  recordSlump();
   renderMedals();
 }
 
@@ -1509,6 +1548,176 @@ const soundBtn = document.getElementById('soundBtn');
 const renderSoundBtn = () => { soundBtn.textContent = Sound.isMuted() ? '🔇' : '🔊'; };
 bindPress(soundBtn, () => { Sound.setMuted(!Sound.isMuted()); renderSoundBtn(); });
 renderSoundBtn();
+
+// ---- スランプグラフ（10Gごとの差枚） ----
+//  記録は medals.history に [ゲーム数, 差枚] で保存（メダルと一緒にブラウザに残る）
+const SLUMP_EVERY = 10;
+const SLUMP_MAX_POINTS = 1000;
+const GRAPH_COLOR = { surface: '#1a1a19', text: '#c3c2b7', grid: '#ffffff1a', zero: '#8a8984', line: '#3987e5' };
+if (!Array.isArray(medals.history)) medals.history = [];
+
+// 今の差枚（払い出し待ちの枚数も含める）
+function currentDiff() {
+  return medals.credit + medals.hand + (replayBet ? 0 : bet) + payQueue - medals.invest;
+}
+function recordSlump() {
+  if (medals.games % SLUMP_EVERY !== 0) return;
+  const h = medals.history;
+  if (!h.length && medals.games === SLUMP_EVERY) h.push([0, 0]);   // 最初は0Gの0枚から
+  h.push([medals.games, currentDiff()]);
+  if (h.length > SLUMP_MAX_POINTS) h.splice(0, h.length - SLUMP_MAX_POINTS);
+  if (graphModal.classList.contains('open')) drawGraph();
+}
+
+const graphModal = document.getElementById('graphModal');
+const graphCanvas = document.getElementById('graphCanvas');
+const graphTip = document.getElementById('graphTip');
+const graphSummary = document.getElementById('graphSummary');
+let graphLayout = null;   // 描画した座標の情報（なぞったときに使う）
+
+// 目盛りの間隔を「きりのいい数」で決める
+function niceStep(range, ticks) {
+  const raw = range / ticks;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 5, 10]) if (raw <= m * pow) return m * pow;
+  return 10 * pow;
+}
+
+function drawGraph(hoverIndex = null) {
+  const dprG = window.devicePixelRatio || 1;
+  const w = graphCanvas.clientWidth, h = graphCanvas.clientHeight;
+  graphCanvas.width = Math.round(w * dprG); graphCanvas.height = Math.round(h * dprG);
+  const c = graphCanvas.getContext('2d');
+  c.setTransform(dprG, 0, 0, dprG, 0, 0);
+  c.fillStyle = GRAPH_COLOR.surface; c.fillRect(0, 0, w, h);
+  c.font = '12px -apple-system, "Hiragino Sans", sans-serif';
+  const data = medals.history;
+  if (data.length < 2) {
+    c.fillStyle = GRAPH_COLOR.text; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(`まだ記録がありません（${SLUMP_EVERY}ゲームごとに記録されます）`, w / 2, h / 2);
+    graphSummary.textContent = '';
+    graphTip.style.display = 'none';
+    graphLayout = null;
+    return;
+  }
+  const m = { l: 56, r: 16, t: 14, b: 30 };
+  const g0 = data[0][0], g1 = data[data.length - 1][0];
+  let dMin = Math.min(0, ...data.map(p => p[1])), dMax = Math.max(0, ...data.map(p => p[1]));
+  if (dMax - dMin < 50) { dMax += 25; dMin -= 25; }
+  const yStep = niceStep(dMax - dMin, 5);
+  dMin = Math.floor(dMin / yStep) * yStep; dMax = Math.ceil(dMax / yStep) * yStep;
+  const X = g => m.l + (g - g0) / Math.max(1, g1 - g0) * (w - m.l - m.r);
+  const Y = d => m.t + (dMax - d) / (dMax - dMin) * (h - m.t - m.b);
+
+  // 横の目盛り線と差枚の数字
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let v = dMin; v <= dMax + 1e-9; v += yStep) {
+    c.strokeStyle = GRAPH_COLOR.grid; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(m.l, Y(v)); c.lineTo(w - m.r, Y(v)); c.stroke();
+    c.fillStyle = GRAPH_COLOR.text; c.fillText(`${v > 0 ? '+' : ''}${v}`, m.l - 6, Y(v));
+  }
+  // 0枚の基準線
+  c.strokeStyle = GRAPH_COLOR.zero; c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(m.l, Y(0)); c.lineTo(w - m.r, Y(0)); c.stroke();
+  // ゲーム数の目盛り
+  const xStep = niceStep(Math.max(SLUMP_EVERY, g1 - g0), 6);
+  c.textAlign = 'center'; c.textBaseline = 'top'; c.fillStyle = GRAPH_COLOR.text;
+  for (let g = Math.ceil(g0 / xStep) * xStep; g <= g1; g += xStep) c.fillText(`${g}G`, X(g), h - m.b + 8);
+
+  // 差枚の線（2px）
+  c.strokeStyle = GRAPH_COLOR.line; c.lineWidth = 2; c.lineJoin = 'round'; c.lineCap = 'round';
+  c.beginPath();
+  data.forEach(([g, d], i) => (i ? c.lineTo(X(g), Y(d)) : c.moveTo(X(g), Y(d))));
+  c.stroke();
+
+  // なぞった位置：縦線＋点＋数値
+  if (hoverIndex !== null) {
+    const [g, d] = data[hoverIndex];
+    c.strokeStyle = '#ffffff55'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(X(g), m.t); c.lineTo(X(g), h - m.b); c.stroke();
+    c.fillStyle = GRAPH_COLOR.line; c.strokeStyle = GRAPH_COLOR.surface; c.lineWidth = 2;
+    c.beginPath(); c.arc(X(g), Y(d), 5, 0, Math.PI * 2); c.fill(); c.stroke();
+    graphTip.textContent = `${g}G　差枚 ${d > 0 ? '+' : ''}${d}枚`;
+    graphTip.style.display = 'block';
+    const tw = graphTip.offsetWidth;
+    graphTip.style.left = `${Math.min(w - tw, Math.max(0, X(g) - tw / 2))}px`;
+    graphTip.style.top = `${Math.max(0, Y(d) - 34)}px`;
+  } else {
+    graphTip.style.display = 'none';
+  }
+  const ds = data.map(p => p[1]);
+  const fmt = v => `${v > 0 ? '+' : ''}${v}枚`;
+  graphSummary.textContent = `現在 ${fmt(ds[ds.length - 1])}　最高 ${fmt(Math.max(...ds))}　最低 ${fmt(Math.min(...ds))}　（${g1}G）`;
+  graphLayout = { X, data };
+}
+
+// 指やマウスでなぞると、一番近い記録点の数値を出す
+function graphHover(e) {
+  if (!graphLayout) return;
+  const rect = graphCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  let best = 0, bd = Infinity;
+  graphLayout.data.forEach(([g], i) => { const dd = Math.abs(graphLayout.X(g) - x); if (dd < bd) { bd = dd; best = i; } });
+  drawGraph(best);
+}
+graphCanvas.addEventListener('pointermove', graphHover);
+graphCanvas.addEventListener('pointerdown', graphHover);
+graphCanvas.addEventListener('pointerleave', () => drawGraph());
+
+function openGraph() { graphModal.classList.add('open'); drawGraph(); }
+function closeGraph() { graphModal.classList.remove('open'); }
+bindPress(document.getElementById('graphBtn'), openGraph);
+bindPress(document.getElementById('graphClose'), closeGraph);
+graphModal.addEventListener('pointerdown', e => { if (e.target === graphModal) closeGraph(); });   // 外側を触っても閉じる
+bindPress(document.getElementById('graphReset'), () => {
+  if (!confirm('スランプグラフの記録を消しますか？（メダルの枚数は変わりません）')) return;
+  medals.history = [];
+  renderMedals();
+  drawGraph();
+});
+window.addEventListener('resize', () => { if (graphModal.classList.contains('open')) drawGraph(); });
+
+// ---- 説明のスクロール表示（リール枠の上） ----
+//  ボーナスの条件と小役の確率を、設定の数値から文章にして流す
+const TICKER_SPEED = 70;   // 1秒あたりに流れるピクセル数
+const TICKER_KEY = 'shachinosuke-ticker';
+const tickerEl = document.getElementById('ticker');
+const tickerText = document.getElementById('tickerText');
+let tickerAnim = null;
+
+function tickerMessage() {
+  const C = SlotLogicLib.CONFIG;
+  const prob = flag => { const e = SlotLogicLib.FLAG_TABLE.find(x => x.flag === flag); return e ? `1/${(65536 / e.n).toFixed(1)}` : '-'; };
+  const pct = v => `${Math.round(v * 100)}%`;
+  const n = C.STREAK_TO_BONUS;
+  return [
+    `【ボーナスの条件】ベル${n}連 → 青7 BIG`,
+    `オレンジ${n}連 → 赤7 BIG`,
+    `リプレイ${n}連 → しゃちのすけチャンス（次のゲームでベル・オレンジ・チェリーならプレミアムREG、その後は${pct(C.PREMIUM_LOOP)}で青7 BIG ループ）`,
+    `チェリー成立 → ${pct(C.CHERRY_TO_ORANGE)}で次のゲームはオレンジ`,
+    `オレンジ成立 → ${pct(C.ORANGE_CHAIN)}で次のゲームもオレンジ`,
+    `【小役の確率】リプレイ ${prob('REPLAY')}　ベル ${prob('BELL')}　オレンジ ${prob('ORANGE')}　チェリー ${prob('CHERRY')}`,
+    `【配当】青7 BIG ${bonusPayout('BIG')}枚　赤7 BIG ${bonusPayout('BIG')}枚　REG（BAR） ${bonusPayout('REG')}枚　ベル・オレンジ 各1枚`,
+  ].join('　／　');
+}
+
+function startTicker() {
+  if (tickerAnim) tickerAnim.cancel();
+  if (tickerEl.classList.contains('hidden')) return;
+  tickerText.textContent = tickerMessage();
+  const cw = tickerEl.clientWidth, tw = tickerText.offsetWidth;
+  tickerAnim = tickerText.animate(
+    [{ transform: `translate(${cw}px, -50%)` }, { transform: `translate(${-tw}px, -50%)` }],
+    { duration: (cw + tw) / TICKER_SPEED * 1000, iterations: Infinity });
+}
+function setTicker(on) {
+  tickerEl.classList.toggle('hidden', !on);
+  try { localStorage.setItem(TICKER_KEY, on ? '1' : '0'); } catch (e) { /* 保存できない環境 */ }
+  startTicker();
+}
+bindPress(document.getElementById('tickerBtn'), () => setTicker(tickerEl.classList.contains('hidden')));
+window.addEventListener('resize', startTicker);
+setTicker((() => { try { return localStorage.getItem(TICKER_KEY) !== '0'; } catch (e) { return true; } })());
 stopBtns.forEach((b, i) => bindPress(b, () => pressStop(i)));
 
 // PCでの確認用キーボード操作: Space=レバー（自動ベット）, Z/X/C または ←↓→ = 停止

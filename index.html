@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>パチスロ</title>
+<style>
+  * { box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #1b1b2b; color: #fff;
+    font-family: -apple-system, "Hiragino Sans", "Segoe UI", sans-serif; overflow: hidden; touch-action: manipulation; }
+  #machine { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; padding: 2vh; }
+  #panel { width: min(94vw, 900px); display: flex; justify-content: space-between; align-items: center;
+    background: #000; border-radius: 10px; padding: 10px 16px; font-size: clamp(14px, 2.2vw, 22px); }
+  #result { font-weight: bold; color: #ffd84a; min-height: 1.3em; }
+  #debug { color: #8fd; font-size: 0.8em; text-align: right; }
+  #frame { background: linear-gradient(#c9a640, #8a6a16); padding: 12px; border-radius: 16px; box-shadow: 0 8px 30px #000a; }
+  #reels { display: block; width: min(90vw, 64vh * 1.37, 860px); aspect-ratio: 1.37; background: #222; border-radius: 6px; }
+  #controls { width: min(94vw, 900px); display: flex; align-items: center; justify-content: space-between; gap: 3vw; }
+  #lever { width: clamp(80px, 13vw, 130px); height: clamp(80px, 13vw, 130px); border-radius: 50%; border: none;
+    background: radial-gradient(circle at 35% 30%, #ff6b6b, #b00000); color: #fff; font-weight: bold; font-size: clamp(14px, 2vw, 20px);
+    box-shadow: 0 6px 0 #600, 0 8px 16px #0008; }
+  #lever:active, #lever.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #600; }
+  #stops { display: flex; gap: 3vw; }
+  .stop { width: clamp(80px, 14vw, 140px); height: clamp(60px, 10vw, 100px); border-radius: 14px; border: none;
+    background: #444; color: #888; font-weight: bold; font-size: clamp(14px, 2vw, 20px); box-shadow: 0 6px 0 #222; }
+  .stop.on { background: radial-gradient(circle at 50% 35%, #8cf, #1060d0); color: #fff; box-shadow: 0 6px 0 #003, 0 0 18px #4af; }
+  .stop.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #003; }
+  label { font-size: 0.8em; color: #aaa; }
+</style>
+</head>
+<body>
+<div id="machine">
+  <div id="panel">
+    <div id="result">レバーを叩いてください</div>
+    <div>
+      <div id="debug"></div>
+      <label><input type="checkbox" id="showFlag" checked> フラグ表示</label>
+    </div>
+  </div>
+  <div id="frame"><canvas id="reels"></canvas></div>
+  <div id="controls">
+    <button id="lever">LEVER</button>
+    <div id="stops">
+      <button class="stop" data-reel="0">左</button>
+      <button class="stop" data-reel="1">中</button>
+      <button class="stop" data-reel="2">右</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+//  パチスロ 内部ロジック（抽選・停止制御）
+//  画面には依存しないので、ここだけ読めばゲームのルールが分かる。
+// =====================================================================
+(function (root) {
+  'use strict';
+
+  const N = 21;        // 1リールのコマ数
+  const MAX_SLIP = 4;  // 最大すべりコマ数
+
+  // ---- 図柄コード ----------------------------------------------------
+  //  R=リプレイ  B=ベル  7=赤7  F=カエル7(白7)  O=オレンジ
+  //  C=チェリー  P=花    W=ブルー  X=BAR
+  const SYMBOL_NAMES = {
+    R: 'リプレイ', B: 'ベル', '7': '赤7', F: 'カエル7', O: 'オレンジ',
+    C: 'チェリー', P: '花', W: 'ブルー', X: 'BAR',
+  };
+
+  // ---- リール配列（画像の上から下の順。index 0 = 1番） ----------------
+  //  リールは下向きに回るので、時間とともに中段の index は減っていく。
+  const STRIPS = [
+    'RB7ORBOPOWBRBOFORBXCO'.split(''), // 左
+    'CR7OBCROBWRBORFBOXROB'.split(''), // 中
+    'OC7BROWBROBFROBXROCBR'.split(''), // 右
+  ];
+
+  // ---- 有効ライン（各リールの段 0=上 1=中 2=下） -----------------------
+  const LINES = [
+    [0, 0, 0], // 上段
+    [1, 1, 1], // 中段
+    [2, 2, 2], // 下段
+    [0, 1, 2], // 右下がり
+    [2, 1, 0], // 右上がり
+  ];
+
+  // ---- 役 --------------------------------------------------------------
+  //  pat: 左中右それぞれ「止まってよい図柄」の文字列。'*' は ANY。
+  //  flag: その役をそろえてよい内部フラグ名。
+  const ROLES = [
+    { id: 'BIG_R',  flag: 'BIG',    name: 'BIG BONUS',     pat: ['7', '7', '7'], pay: 0 },
+    { id: 'BIG_F',  flag: 'BIG',    name: 'BIG BONUS',     pat: ['F', 'F', 'F'], pay: 0 },
+    { id: 'REG_R',  flag: 'REG',    name: 'REGULAR BONUS', pat: ['7', '7', 'X'], pay: 0 },
+    { id: 'REG_F',  flag: 'REG',    name: 'REGULAR BONUS', pat: ['F', 'F', 'X'], pay: 0 },
+    { id: 'REPLAY', flag: 'REPLAY', name: 'リプレイ',       pat: ['RW', 'R', 'R'], pay: 0 },
+    { id: 'BELL',   flag: 'BELL',   name: 'ベル',           pat: ['B', 'B', 'B'], pay: 6 },
+    { id: 'ORANGE', flag: 'ORANGE', name: 'オレンジ',       pat: ['O', 'O', 'O'], pay: 10 },
+    { id: 'CHERRY', flag: 'CHERRY', name: 'チェリー',       pat: ['CP', '*', '*'], pay: 1 },
+    // ボーナス中専用役（通常時は絶対にそろえない）
+    { id: 'B_FOW',  flag: 'BONUS_ONLY', name: 'カエル7-オレンジ-ブルー', pat: ['F', 'O', 'W'], pay: 15 },
+    { id: 'B_FOO',  flag: 'BONUS_ONLY', name: 'カエル7-オレンジ-オレンジ', pat: ['F', 'O', 'O'], pay: 6 },
+  ];
+
+  // ---- 通常時の抽選テーブル（分母 65536） ------------------------------
+  //  ここを書き換えれば確率を調整できる。
+  const FLAG_TABLE = [
+    { flag: 'BIG',    n: 273  }, // 約 1/240
+    { flag: 'REG',    n: 164  }, // 約 1/400
+    { flag: 'REPLAY', n: 9362 }, // 約 1/7
+    { flag: 'BELL',   n: 8192 }, // 1/8
+    { flag: 'ORANGE', n: 2048 }, // 1/32
+    { flag: 'CHERRY', n: 1638 }, // 約 1/40
+  ];
+
+  const FLAG_NAMES = {
+    BIG: 'BIG', REG: 'REG', REPLAY: 'リプレイ', BELL: 'ベル',
+    ORANGE: 'オレンジ', CHERRY: 'チェリー',
+  };
+
+  // ---- 共通関数 --------------------------------------------------------
+  const mod = (a, n = N) => ((a % n) + n) % n;
+
+  // pos = 中段に止まっている図柄の index、row = 0上 1中 2下
+  function symAt(reel, pos, row) {
+    return STRIPS[reel][mod(pos - 1 + row)];
+  }
+
+  function match(sym, p) {
+    return p === '*' || p.indexOf(sym) >= 0;
+  }
+
+  // ある役のあるラインの状態: 'aligned'(そろった) / 'possible'(まだそろう可能性) / 'dead'
+  function lineState(role, stops, line) {
+    let aligned = true;
+    for (let r = 0; r < 3; r++) {
+      const p = role.pat[r];
+      if (p === '*') continue;
+      if (stops[r] === null) {
+        aligned = false; // 未停止リールはどこにでも止まれるとみなす
+      } else if (!match(symAt(r, stops[r], line[r]), p)) {
+        return 'dead';
+      }
+    }
+    return aligned ? 'aligned' : 'possible';
+  }
+
+  function alignedLines(role, stops) {
+    const res = [];
+    LINES.forEach((line, i) => { if (lineState(role, stops, line) === 'aligned') res.push(i); });
+    return res;
+  }
+
+  function possibleLineCount(role, stops) {
+    let c = 0;
+    for (const line of LINES) if (lineState(role, stops, line) !== 'dead') c++;
+    return c;
+  }
+
+  function lottery(rand = Math.random) {
+    const r = Math.floor(rand() * 65536);
+    let acc = 0;
+    for (const e of FLAG_TABLE) {
+      acc += e.n;
+      if (r < acc) return e.flag;
+    }
+    return null; // ハズレ
+  }
+
+  // スコア比較（配列の辞書順で小さいほうが良い）
+  function better(a, b) {
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return a[i] < b[i];
+    }
+    return false;
+  }
+
+  // ---- 先読み制御 ------------------------------------------------------
+  //  全リール停止時: 狙い役がそろえば 1、フラグ無し役がそろえば -10、それ以外 0。
+  //  途中: 残りの各リールについて「21通りの押し位置 × 最善のすべり(0〜4)」の平均。
+  //  結果は狙い役ごとにメモしておくので2回目以降は一瞬で終わる。
+  const memos = {};
+  function getMemo(targetList) {
+    const key = targetList.map(r => r.id).join('+') || 'NONE';
+    return memos[key] || (memos[key] = new Map());
+  }
+
+  function lookAhead(stops, targets, memo) {
+    const key = stops.join(',');
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    let value;
+    if (stops.every(s => s !== null)) {
+      value = 0;
+      for (const role of ROLES) {
+        if (!alignedLines(role, stops).length) continue;
+        if (targets.has(role.id)) value = Math.max(value, 1);
+        else { value = -10; break; }
+      }
+    } else {
+      let sum = 0, cnt = 0;
+      for (let r = 0; r < 3; r++) {
+        if (stops[r] !== null) continue;
+        for (let p = 0; p < N; p++) {
+          let best = -Infinity;
+          for (let k = 0; k <= MAX_SLIP; k++) {
+            const t = stops.slice();
+            t[r] = mod(p - k);
+            best = Math.max(best, lookAhead(t, targets, memo));
+          }
+          sum += best; cnt++;
+        }
+      }
+      value = Math.round(sum / cnt * 1e9) / 1e9;
+    }
+    memo.set(key, value);
+    return value;
+  }
+
+  // =====================================================================
+  //  ゲーム進行
+  // =====================================================================
+  class SlotLogic {
+    constructor() {
+      this.bonusFlag = null;  // 持ち越し中のボーナスフラグ ('BIG' | 'REG' | null)
+      this.smallFlag = null;  // このゲームの小役フラグ
+      this.stops = [null, null, null];
+    }
+
+    // レバーON：抽選する
+    startGame(rand) {
+      const f = lottery(rand);
+      this.smallFlag = null;
+      if (f === 'BIG' || f === 'REG') {
+        if (!this.bonusFlag) this.bonusFlag = f; // 持ち越し中の再当選はハズレ扱い
+      } else {
+        this.smallFlag = f;
+      }
+      this.stops = [null, null, null];
+      return { smallFlag: this.smallFlag, bonusFlag: this.bonusFlag };
+    }
+
+    // 今ゲームでそろえに行く役（小役が優先、小役がなければ持ち越しボーナス）
+    targetRoles() {
+      const flag = this.smallFlag || this.bonusFlag;
+      return flag ? ROLES.filter(r => r.flag === flag) : [];
+    }
+
+    // 停止ボタンが押された：pressPos(押した瞬間の中段図柄) から 0〜4コマの中で止める位置を決める
+    decideStop(reel, pressPos) {
+      const targetList = this.targetRoles();
+      const targets = new Set(targetList.map(r => r.id));
+      const memo = getMemo(targetList);
+      let best = null;
+      for (let k = 0; k <= MAX_SLIP; k++) {
+        const pos = mod(pressPos - k);
+        const trial = this.stops.slice();
+        trial[reel] = pos;
+        // 先読み：この位置で止めた後、残りリールをどのタイミングで押されても
+        // 最善の制御をしたとき、狙い役がそろう確率（フラグ無し役がそろうと大きく減点）
+        const value = lookAhead(trial, targets, memo);
+        let avoidLines = 0;// フラグの無い役がそろう可能性のあるライン数（少ないほど良い）
+        for (const role of ROLES) {
+          if (!targets.has(role.id)) avoidLines += possibleLineCount(role, trial);
+        }
+        const score = [-value, avoidLines, k];
+        if (!best || better(score, best.score)) best = { pos, slip: k, score };
+      }
+      this.stops[reel] = best.pos;
+      return best;
+    }
+
+    // 全リール停止：入賞判定
+    finishGame() {
+      const wins = [];
+      for (const role of ROLES) {
+        const lines = alignedLines(role, this.stops);
+        if (lines.length) wins.push({ role, lines, pay: role.pay * lines.length });
+      }
+      if (wins.some(w => w.role.flag === this.bonusFlag)) this.bonusFlag = null;
+      return wins;
+    }
+  }
+
+  const api = {
+    N, MAX_SLIP, STRIPS, LINES, ROLES, FLAG_TABLE, FLAG_NAMES, SYMBOL_NAMES,
+    mod, symAt, lottery, SlotLogic,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.SlotLogicLib = api;
+})(this);
+</script>
+<script>
+'use strict';
+const { N, STRIPS, LINES, FLAG_NAMES, mod, SlotLogic } = SlotLogicLib;
+
+// ---- 設定 ----
+const SPEED = 80 * N / 60;   // 80回転/分 → 1秒あたりのコマ数
+const ACCEL_TIME = 0.3;      // 回転開始から定速になるまで(秒)
+
+const logic = new SlotLogic();
+const canvas = document.getElementById('reels');
+const ctx = canvas.getContext('2d');
+const resultEl = document.getElementById('result');
+const debugEl = document.getElementById('debug');
+const showFlagEl = document.getElementById('showFlag');
+const stopBtns = [...document.querySelectorAll('.stop')];
+const leverBtn = document.getElementById('lever');
+
+// リールの状態。pos は中段にある図柄の index（小数で回転中を表現）
+const reels = [0, 1, 2].map(() => ({
+  pos: Math.floor(Math.random() * N), speed: 0, state: 'stopped', target: 0, slip: 0,
+}));
+let wins = [];
+let gameInfo = null;
+
+// =================== 描画 ===================
+let dpr = 1, W = 0, H = 0, cellW = 0, cellH = 0, gap = 0;
+let symbolImages = {};
+
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  W = rect.width; H = rect.height;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  gap = W * 0.02;
+  cellW = (W - gap * 4) / 3;
+  cellH = (H - gap * 2) / 3;
+  buildSymbols();
+}
+
+function emoji(c, ch, cx, cy, size) {
+  c.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(ch, cx, cy);
+}
+
+function draw7(c, w, h, fill, stroke) {
+  c.font = `900 ${h * 0.92}px "Arial Black", Impact, sans-serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.lineJoin = 'round';
+  c.lineWidth = h * 0.12; c.strokeStyle = stroke; c.strokeText('7', w / 2, h * 0.54);
+  c.fillStyle = fill; c.fillText('7', w / 2, h * 0.54);
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+function drawSymbol(c, s, w, h) {
+  const cx = w / 2, cy = h / 2;
+  switch (s) {
+    case '7': draw7(c, w, h, '#e60012', '#5a0000'); break;
+    case 'F':
+      draw7(c, w, h, '#ffffff', '#1a8a2a');
+      emoji(c, '🐸', w * 0.62, h * 0.66, h * 0.42);
+      break;
+    case 'B': emoji(c, '🔔', cx, cy, h * 0.68); break;
+    case 'O': emoji(c, '🍊', cx, cy, h * 0.68); break;
+    case 'C': emoji(c, '🍒', cx, cy, h * 0.68); break;
+    case 'P': emoji(c, '🌸', cx, cy, h * 0.68); break;
+    case 'W': {
+      const g = c.createLinearGradient(0, h * 0.2, 0, h * 0.8);
+      g.addColorStop(0, '#5ab4ff'); g.addColorStop(1, '#0a3d91');
+      roundRect(c, w * 0.12, h * 0.2, w * 0.76, h * 0.6, h * 0.1);
+      c.fillStyle = g; c.fill();
+      emoji(c, '🐊', cx, cy, h * 0.45);
+      break;
+    }
+    case 'R': {
+      c.beginPath(); c.arc(cx, cy, h * 0.34, 0, Math.PI * 2);
+      c.fillStyle = '#2f8fe0'; c.fill();
+      c.lineWidth = h * 0.05; c.strokeStyle = '#fff'; c.stroke();
+      c.beginPath(); c.arc(cx, cy, h * 0.24, 0, Math.PI * 2);
+      c.lineWidth = h * 0.03; c.strokeStyle = '#cfe8ff'; c.stroke();
+      c.font = `900 ${h * 0.3}px "Arial Black", sans-serif`;
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff';
+      c.fillText('R', cx, cy + h * 0.01);
+      break;
+    }
+    case 'X': {
+      roundRect(c, w * 0.1, h * 0.22, w * 0.8, h * 0.56, h * 0.06);
+      c.fillStyle = '#111'; c.fill();
+      c.lineWidth = h * 0.04; c.strokeStyle = '#ccc'; c.stroke();
+      c.font = `900 ${h * 0.36}px "Arial Black", sans-serif`;
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#eee';
+      c.fillText('BAR', cx, cy + h * 0.01);
+      break;
+    }
+  }
+}
+
+// 図柄はあらかじめ画像化しておき、毎フレームはコピーするだけにする
+function buildSymbols() {
+  symbolImages = {};
+  for (const s of 'RB7FOCPWX') {
+    const off = document.createElement('canvas');
+    off.width = Math.round(cellW * dpr); off.height = Math.round(cellH * dpr);
+    const c = off.getContext('2d');
+    c.scale(dpr, dpr);
+    const img = customImages[s];
+    if (img) drawImageFit(c, img, cellW, cellH);
+    else drawSymbol(c, s, cellW, cellH);   // 画像が無ければ標準の絵
+    symbolImages[s] = off;
+  }
+}
+
+// ---- 絵柄画像の読み込み ----
+//  index.html と同じ場所の symbols フォルダに下の名前で画像を置くと、その画像を使う。
+//  無い絵柄は標準の絵のまま。png 以外の拡張子も順に探す。
+const SYMBOL_FILES = {
+  '7': 'red7', F: 'frog7', X: 'bar', R: 'replay', W: 'blue',
+  B: 'bell', O: 'orange', C: 'cherry', P: 'flower',
+};
+const IMAGE_EXTS = ['png', 'webp', 'jpg', 'jpeg'];
+const SYMBOL_PADDING = 0.06;   // コマの上下左右に空ける余白（コマサイズに対する割合）
+const customImages = {};
+
+// 縦横比を保ったままコマに収めて中央に描く
+function drawImageFit(c, img, w, h) {
+  const bw = w * (1 - SYMBOL_PADDING * 2), bh = h * (1 - SYMBOL_PADDING * 2);
+  const scale = Math.min(bw / img.naturalWidth, bh / img.naturalHeight);
+  const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+  c.imageSmoothingQuality = 'high';
+  c.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+}
+
+function loadSymbolImage(sym, name, extIndex = 0) {
+  if (extIndex >= IMAGE_EXTS.length) return;   // 見つからない → 標準の絵
+  const img = new Image();
+  img.onload = () => { customImages[sym] = img; buildSymbols(); };
+  img.onerror = () => loadSymbolImage(sym, name, extIndex + 1);
+  img.src = `symbols/${name}.${IMAGE_EXTS[extIndex]}`;
+}
+
+for (const [sym, name] of Object.entries(SYMBOL_FILES)) loadSymbolImage(sym, name);
+
+function reelX(i) { return gap + i * (cellW + gap); }
+
+function draw(time) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < 3; i++) {
+    const r = reels[i];
+    const x = reelX(i), y0 = gap;
+    const winH = cellH * 3;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y0, cellW, winH); ctx.clip();
+    // リール地（白）
+    const g = ctx.createLinearGradient(0, y0, 0, y0 + winH);
+    g.addColorStop(0, '#bbb'); g.addColorStop(0.5, '#fff'); g.addColorStop(1, '#bbb');
+    ctx.fillStyle = g; ctx.fillRect(x, y0, cellW, winH);
+    // 図柄: index j の中心 y = 中段中心 + (j - pos) * cellH
+    const base = Math.floor(r.pos);
+    for (let j = base - 2; j <= base + 3; j++) {
+      const cy = y0 + cellH * 1.5 + (j - r.pos) * cellH;
+      const img = symbolImages[STRIPS[i][mod(j)]];
+      ctx.drawImage(img, x, cy - cellH / 2, cellW, cellH);
+    }
+    // 上下の影
+    const sh = ctx.createLinearGradient(0, y0, 0, y0 + winH);
+    sh.addColorStop(0, 'rgba(0,0,0,0.35)'); sh.addColorStop(0.15, 'rgba(0,0,0,0)');
+    sh.addColorStop(0.85, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = sh; ctx.fillRect(x, y0, cellW, winH);
+    ctx.restore();
+  }
+
+  // 入賞ラインの表示（点滅）
+  if (wins.length && Math.floor(time / 300) % 2 === 0) {
+    ctx.lineWidth = Math.max(4, cellH * 0.06);
+    ctx.lineCap = 'round';
+    for (const w of wins) {
+      ctx.strokeStyle = w.role.flag === 'BIG' || w.role.flag === 'REG' ? 'rgba(255,40,40,0.8)' : 'rgba(255,200,0,0.8)';
+      for (const li of w.lines) {
+        const line = LINES[li];
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const px = reelX(i) + cellW / 2;
+          const py = gap + cellH * (line[i] + 0.5);
+          if (i === 0) ctx.moveTo(px - cellW * 0.45, py);
+          ctx.lineTo(px, py);
+          if (i === 2) ctx.lineTo(px + cellW * 0.45, py);
+        }
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// =================== ゲーム進行 ===================
+function updateButtons() {
+  stopBtns.forEach((b, i) => b.classList.toggle('on', reels[i].state === 'spin'));
+}
+
+function updateDebug() {
+  if (!showFlagEl.checked || !gameInfo) { debugEl.textContent = ''; return; }
+  const small = gameInfo.smallFlag ? FLAG_NAMES[gameInfo.smallFlag] : 'ハズレ';
+  const bonus = logic.bonusFlag ? ` / ボーナス持越: ${logic.bonusFlag}` : '';
+  const slips = reels.map(r => r.state === 'stopped' ? r.slip : '-').join(' ');
+  debugEl.textContent = `フラグ: ${small}${bonus}　すべり: ${slips}`;
+}
+
+function pullLever() {
+  if (reels.some(r => r.state !== 'stopped')) return;
+  gameInfo = logic.startGame();
+  wins = [];
+  resultEl.textContent = '';
+  for (const r of reels) { r.state = 'accel'; r.speed = 0; r.slip = 0; }
+  updateDebug();
+}
+
+function pressStop(i) {
+  const r = reels[i];
+  if (r.state !== 'spin') return;
+  const pressPos = Math.floor(r.pos);          // 次に中段へ来る図柄
+  const res = logic.decideStop(i, mod(pressPos));
+  r.target = pressPos - res.slip;
+  r.slip = res.slip;
+  r.state = 'stopping';
+  updateButtons();
+}
+
+function onAllStopped() {
+  wins = logic.finishGame();
+  if (!wins.length) {
+    resultEl.textContent = '';
+  } else {
+    resultEl.textContent = wins.map(w => w.pay ? `${w.role.name} ${w.pay}枚` : w.role.name).join(' / ');
+  }
+  updateDebug();
+}
+
+function update(dt) {
+  let anyMoving = false, justStopped = false;
+  for (const r of reels) {
+    if (r.state === 'stopped') continue;
+    anyMoving = true;
+    if (r.state === 'accel') {
+      r.speed = Math.min(SPEED, r.speed + SPEED * dt / ACCEL_TIME);
+      if (r.speed >= SPEED) { r.state = 'spin'; updateButtons(); }
+    }
+    r.pos -= r.speed * dt;
+    if (r.state === 'stopping') {
+      if (r.pos <= r.target) {
+        r.pos = mod(r.target);
+        r.state = 'stopped';
+        justStopped = true;
+      }
+    } else if (r.pos < 0) {
+      r.pos += N;
+    }
+  }
+  if (justStopped) {
+    updateDebug();
+    if (reels.every(r => r.state === 'stopped')) onAllStopped();
+  }
+}
+
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000);
+  last = t;
+  update(dt);
+  draw(t);
+  requestAnimationFrame(frame);
+}
+
+// =================== 入力 ===================
+function bindPress(el, fn) {
+  el.addEventListener('pointerdown', e => { e.preventDefault(); el.classList.add('pressed'); fn(); });
+  const up = () => el.classList.remove('pressed');
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointerleave', up);
+  el.addEventListener('pointercancel', up);
+}
+bindPress(leverBtn, pullLever);
+stopBtns.forEach((b, i) => bindPress(b, () => pressStop(i)));
+showFlagEl.addEventListener('change', updateDebug);
+
+// PCでの確認用キーボード操作: Space=レバー, Z/X/C または ←↓→ = 停止
+window.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ' || k === 'enter') { e.preventDefault(); pullLever(); }
+  else if (k === 'z' || k === 'arrowleft') pressStop(0);
+  else if (k === 'x' || k === 'arrowdown') pressStop(1);
+  else if (k === 'c' || k === 'arrowright') pressStop(2);
+});
+
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

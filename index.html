@@ -24,7 +24,27 @@
   #machine { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5vh; padding: 1.5vh; }
   #stage { display: grid; grid-template-columns: var(--S) auto; column-gap: 2vw; row-gap: 1.5vh; width: var(--W); }
   #side { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
-  #frame { grid-column: 2; grid-row: 1; }
+  #frame { grid-column: 2; grid-row: 1; position: relative; }
+
+  /* カットイン（リール枠の上に約1秒） */
+  #cutin { position: absolute; inset: 12px; border-radius: 6px; overflow: hidden; display: none; z-index: 5;
+    pointer-events: none; }
+  #cutin img { width: 100%; height: 100%; object-fit: cover; object-position: 72% center; display: block; }
+  #cutin.show { display: block; animation: cutinIn 1s ease-out forwards; }
+  #cutin.show.strong img { animation: cutinShake 0.25s 2; }
+  #cutin.show.confirm img { animation: cutinShake 0.18s 4, cutinFlash 1s; }
+  @keyframes cutinIn {
+    0% { opacity: 0; transform: scale(1.25); }
+    12% { opacity: 1; transform: scale(1); }
+    85% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @keyframes cutinShake {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-6px, 3px); }
+    75% { transform: translate(6px, -3px); }
+  }
+  @keyframes cutinFlash { 0%, 30% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
   #leverBox { grid-column: 1; grid-row: 2; display: flex; justify-content: center; align-items: center; }
   #chara { display: block; height: calc(var(--H) * var(--CHARA)); width: auto;
     filter: drop-shadow(0 6px 12px #000a); visibility: hidden; }
@@ -108,8 +128,6 @@
     </div>
     <div class="row">
       <div id="stats"></div>
-      <div id="debug" style="text-align:left; flex: 1"></div>
-      <label><input type="checkbox" id="showFlag" checked> フラグ表示</label>
       <div>
         <button class="small" id="lendBtn">貸出 50枚</button>
         <button class="small" id="settleBtn">精算</button>
@@ -121,7 +139,7 @@
       <div id="bubble">しょうちのすけ</div>
       <img id="chara" alt="しゃちのすけ">
     </div>
-    <div id="frame"><canvas id="reels"></canvas></div>
+    <div id="frame"><canvas id="reels"></canvas><div id="cutin"><img alt=""></div></div>
     <div id="leverBox">
       <button id="lever" aria-label="レバー"><span class="lv-base"></span><span class="lv-arm"><span class="lv-knob"></span></span></button>
     </div>
@@ -218,7 +236,22 @@
     BONUS_PAY: 15,
     BIG_END: 15,
     REG_END: 10,
+    // カットイン：小役が2連続した次のゲームのレバーONで抽選。割合は [なし, 弱, 強, 確定]
+    CUTIN_HIT:  [1, 2, 5, 7],   // そのゲームで3連続が成立したとき
+    CUTIN_MISS: [10, 4, 1, 0],  // 3連続が成立しなかったとき
   };
+  const CUTIN_TYPES = [null, 'weak', 'strong', 'confirm'];
+  const CUTIN_ROLES = ['BELL', 'ORANGE', 'REPLAY'];   // 3連で何か起きる小役だけ
+
+  function pickCutin(weights, rand) {
+    const total = weights.reduce((a, b) => a + b, 0);
+    let r = rand() * total;
+    for (let i = 0; i < weights.length; i++) {
+      if (r < weights[i]) return CUTIN_TYPES[i];
+      r -= weights[i];
+    }
+    return null;
+  }
 
   const FLAG_NAMES = {
     BIG_BLUE: '青7 BIG', BIG_RED: '赤7 BIG', REG: 'REG', REPLAY: 'リプレイ', BELL: 'ベル',
@@ -356,12 +389,16 @@
     startGame(rand = Math.random) {
       this.events = [];
       this.stops = [null, null, null];
+      this.cutin = null;
+      this.hot = null;          // 小役2連の次のゲームなら { hit, p }
       // ボーナスゲーム中：毎ゲームベル成立（払い出しは BONUS_PAY 枚）。通常の抽選・連続カウントはしない
       this.inBonusNow = !!this.bonusGame;
       if (this.inBonusNow) {
         this.smallFlag = 'BELL';
         return { smallFlag: this.smallFlag, bonusFlag: this.bonusFlag, events: this.events };
       }
+      const heldAtStart = !!this.bonusFlag;
+      const orangeForced = !heldAtStart && this.forceOrange;   // このゲームはオレンジ確定だったか
       let f;
       if (this.bonusFlag) {
         // ボーナス持ち越し中はリプレイだけを抽選（次オレンジの予約も消える）
@@ -384,6 +421,18 @@
         else this.events.push('CHANCE_MISS');
       }
 
+      // カットイン：直前まで同じ小役が2連続していたら、このゲームで3連続になるかで出し分ける
+      const prevFlag = this.streakFlag, prevCount = this.streakCount;
+      this.hot = null;
+      if (!heldAtStart && CUTIN_ROLES.includes(prevFlag) && prevCount === CONFIG.STREAK_TO_BONUS - 1) {
+        const hit = f === prevFlag;
+        this.cutin = pickCutin(hit ? CONFIG.CUTIN_HIT : CONFIG.CUTIN_MISS, rand);
+        // 熱いセリフ用：3連になったか(hit)と、このゲームで3連になる確率(p)
+        const p = (prevFlag === 'ORANGE' && orangeForced) ? 1
+          : (FLAG_TABLE.find(e => e.flag === prevFlag) || { n: 0 }).n / 65536;
+        this.hot = { hit, p };
+      }
+
       // 連続成立を数える
       if (f && f === this.streakFlag) this.streakCount++;
       else { this.streakFlag = f; this.streakCount = f ? 1 : 0; }
@@ -399,7 +448,7 @@
       if (f === 'CHERRY' && rand() < CONFIG.CHERRY_TO_ORANGE) this.forceOrange = true;
       if (f === 'ORANGE' && rand() < CONFIG.ORANGE_CHAIN) this.forceOrange = true;
 
-      return { smallFlag: this.smallFlag, bonusFlag: this.bonusFlag, events: this.events };
+      return { smallFlag: this.smallFlag, bonusFlag: this.bonusFlag, events: this.events, cutin: this.cutin };
     }
 
     // 今ゲームでそろえに行く役（小役が優先、小役がなければ持ち越しボーナス）
@@ -490,8 +539,6 @@ const logic = new SlotLogic();
 const canvas = document.getElementById('reels');
 const ctx = canvas.getContext('2d');
 const resultEl = document.getElementById('result');
-const debugEl = document.getElementById('debug');
-const showFlagEl = document.getElementById('showFlag');
 const stopBtns = [...document.querySelectorAll('.stop')];
 const leverBtn = document.getElementById('lever');
 
@@ -964,19 +1011,36 @@ function draw(time) {
 
 // =================== ゲーム進行 ===================
 function updateButtons() {
-  stopBtns.forEach((b, i) => b.classList.toggle('on', reels[i].state === 'spin'));
+  const blocked = cutinActive();
+  stopBtns.forEach((b, i) => b.classList.toggle('on', reels[i].state === 'spin' && !blocked));
 }
 
-function updateDebug() {
-  if (!showFlagEl.checked || !gameInfo) { debugEl.textContent = ''; return; }
-  const small = gameInfo.smallFlag ? FLAG_NAMES[gameInfo.smallFlag] : 'ハズレ';
-  const bonus = logic.bonusFlag ? ` / 持越: ${FLAG_NAMES[logic.bonusFlag]}` : '';
-  const streak = logic.streakCount ? ` / ${FLAG_NAMES[logic.streakFlag]}${logic.streakCount}連` : '';
-  const extra = (logic.forceOrange ? ' / 次オレンジ' : '') + (logic.chance ? ' / 次チャンス' : '') +
-                (logic.loop ? ' / ループ中' : '');
-  const slips = reels.map(r => r.state === 'stopped' ? r.slip : '-').join(' ');
-  debugEl.textContent = `フラグ: ${small}${bonus}${streak}${extra}　すべり: ${slips}`;
+// ---- カットイン ----
+//  弱＝青、強＝赤、確定＝稲妻。レバーON時にリール枠の上へ CUTIN_MS ミリ秒表示する。
+//  表示中は停止ボタンを押せない（リールが隠れているため）。
+const CUTIN_MS = 1000;
+const CUTIN_IMAGES = {
+  weak: 'cutin/cutin_blue.png',
+  strong: 'cutin/cutin_red.png',
+  confirm: 'cutin/cutin_lightning.png',
+};
+const cutinEl = document.getElementById('cutin');
+const cutinImg = cutinEl.querySelector('img');
+let cutinUntil = 0;
+// 画像は大きいので最初に読み込んでおく（表示がすぐ出るように）
+for (const src of Object.values(CUTIN_IMAGES)) new Image().src = `${src}?v=${ASSET_VERSION}`;
+
+function cutinActive() { return performance.now() < cutinUntil; }
+
+function showCutin(type) {
+  cutinImg.src = `${CUTIN_IMAGES[type]}?v=${ASSET_VERSION}`;
+  cutinEl.className = '';
+  void cutinEl.offsetWidth;             // アニメーションをやり直すため
+  cutinEl.className = `show ${type}`;
+  cutinUntil = performance.now() + CUTIN_MS;
+  setTimeout(() => { cutinEl.className = ''; updateButtons(); }, CUTIN_MS);
 }
+
 
 // ゲーム性の出来事を画面に出す文
 const EVENT_TEXT = {
@@ -996,10 +1060,28 @@ function eventMessages() {
   return msgs;
 }
 
-// ---- 吹き出しのセリフ（毎ゲーム、前回と違うものを選ぶ） ----
-const LINES_SPEECH = ['しゃ！？', 'しょ！？', 'しょうちのすけ', 'しょうちしました'];
+// ---- 吹き出しのセリフ ----
+//  優先順：①ボーナス持ち越し中 ②小役2連の次のゲーム（熱いセリフ） ③オレンジ成立 ④それ以外
+const SPEECH = {
+  // ② 出たときに3連が成立する割合（信頼度）が決まっている熱いセリフ
+  HOT: [
+    { text: 'しゃ、しゃ！', trust: 1.0, hitWeight: 0.3 },   // 成立確定
+    { text: 'しゃ！',       trust: 0.8, hitWeight: 0.4 },   // 80%
+    { text: 'しゃ！？',     trust: 0.5, hitWeight: 0.3 },   // 50%
+  ],
+  // ③ 通常時にオレンジが成立したとき（残りの10%は④）
+  ORANGE: [
+    { text: 'しょうちのすけ！', rate: 0.7 },
+    { text: 'むむ！？',         rate: 0.2 },
+  ],
+  // ④ それ以外
+  NORMAL: ['・・・', 'しゃ', 'しゃち', 'し'],
+  MOOD_RATE: 0.2,   // ④のうち、差枚に応じたセリフを出す割合（たまに）
+  MINUS: ['あかんす', 'こんなもんすね', '海・・'],
+  PLUS: ['いい感じっす', '今日は飲みっす', '肉食べるっす', 'やるっち！'],
+};
 const bubbleEl = document.getElementById('bubble');
-let lastSpeech = -1;
+let lastSpeech = '';
 // ボーナスを持っている間は、狙う図柄を教えるセリフに固定
 const BONUS_SPEECH = {
   BIG_BLUE: '青７を狙うんす',
@@ -1014,13 +1096,46 @@ function showSpeech(text) {
   bubbleEl.classList.add('pop');
 }
 
-function speak() {
-  if (logic.bonusFlag) { showSpeech(BONUS_SPEECH[logic.bonusFlag]); return; }
-  // 前回以外の中から1つ選ぶ（ループしない書き方）
-  let i = Math.floor(Math.random() * (LINES_SPEECH.length - (lastSpeech >= 0 ? 1 : 0)));
-  if (lastSpeech >= 0 && i >= lastSpeech) i++;
-  lastSpeech = i;
-  showSpeech(LINES_SPEECH[i]);
+// 配列から1つ選ぶ（前回と同じものはなるべく避ける）
+function pickLine(list) {
+  const pool = list.length > 1 ? list.filter(t => t !== lastSpeech) : list;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ② 熱いセリフを選ぶ。3連成立時は hitWeight の割合で必ずどれかを出す。
+//    不成立時は、信頼度がぴったりになる確率だけ出す（残りは普通のセリフ）。
+//    p = このゲームで3連になる確率。信頼度 t のセリフの不成立時の出現率 = p×hitWeight×(1−t) / ((1−p)×t)
+function pickHotLine(hot) {
+  // 必ず3連になるゲーム（オレンジ連鎖で次もオレンジ確定）は確定セリフだけ。
+  // ここで他のセリフを出すと、外れの無いデータが混ざって信頼度がずれるため。
+  if (hot.p >= 1) return SPEECH.HOT.find(h => h.trust >= 1).text;
+  const r = Math.random();
+  let acc = 0;
+  for (const h of SPEECH.HOT) {
+    if (hot.hit) acc += h.hitWeight;
+    else if (hot.p < 1) acc += hot.p * h.hitWeight * (1 - h.trust) / ((1 - hot.p) * h.trust);
+    if (r < acc) return h.text;
+  }
+  return null;
+}
+
+// レバーON時のセリフ。heldFlag = このゲームを始める前から持っていたボーナス
+function speak(heldFlag, info) {
+  let text = null;
+  if (heldFlag) text = BONUS_SPEECH[heldFlag];                        // ①
+  else if (logic.hot) text = pickHotLine(logic.hot);                 // ②
+  if (!text && !heldFlag && !logic.inBonusNow && info.smallFlag === 'ORANGE') {   // ③
+    const r = Math.random();
+    let acc = 0;
+    for (const o of SPEECH.ORANGE) { acc += o.rate; if (r < acc) { text = o.text; break; } }
+  }
+  if (!text) {                                                        // ④
+    const diff = medals.credit + medals.hand + (replayBet ? 0 : bet) - medals.invest;
+    const mood = diff < 0 ? SPEECH.MINUS : diff > 0 ? SPEECH.PLUS : null;
+    text = pickLine(mood && Math.random() < SPEECH.MOOD_RATE ? mood : SPEECH.NORMAL);
+  }
+  lastSpeech = text;
+  showSpeech(text);
 }
 
 // ゲーム終了時：ボーナスが立った・変わった（ループ継続など）ならすぐセリフを切り替える
@@ -1033,20 +1148,21 @@ function pullLever() {
   if (!canOperate()) return;
   if (bet < BET_MAX) maxBet();        // レバーを叩くと自動で3枚掛け
   if (bet < BET_MAX) return;          // メダル不足（maxBet がメッセージを出す）
-  speak();
+  const heldFlag = logic.bonusFlag;   // 抽選前に持っていたボーナス（このゲームで立つ分はゲーム終了時に知らせる）
   gameInfo = logic.startGame();
+  speak(heldFlag, gameInfo);
+  if (gameInfo.cutin) showCutin(gameInfo.cutin);
   medals.games++;
   wins = [];
   payShown = 0;
   resultEl.textContent = '';
   for (const r of reels) { r.state = 'accel'; r.speed = 0; r.slip = 0; }
   renderMedals();
-  updateDebug();
 }
 
 function pressStop(i) {
   const r = reels[i];
-  if (r.state !== 'spin') return;
+  if (r.state !== 'spin' || cutinActive()) return;
   const pressPos = Math.floor(r.pos);          // 次に中段へ来る図柄
   const res = logic.decideStop(i, mod(pressPos));
   r.target = pressPos - res.slip;
@@ -1067,7 +1183,6 @@ function onAllStopped() {
   speakAfterGame();
   bet = replayBet ? BET_MAX : 0;
   renderMedals();
-  updateDebug();
 }
 
 function update(dt) {
@@ -1091,7 +1206,6 @@ function update(dt) {
     }
   }
   if (justStopped) {
-    updateDebug();
     if (reels.every(r => r.state === 'stopped')) onAllStopped();
   }
   updatePayout(dt);
@@ -1128,7 +1242,6 @@ bindPress(leverBtn, pullLever);
 bindPress(lendBtn, lend);
 bindPress(settleBtn, settle);
 stopBtns.forEach((b, i) => bindPress(b, () => pressStop(i)));
-showFlagEl.addEventListener('change', updateDebug);
 
 // PCでの確認用キーボード操作: Space=レバー（自動ベット）, Z/X/C または ←↓→ = 停止
 window.addEventListener('keydown', e => {

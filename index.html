@@ -9,20 +9,34 @@
   * { box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: #1b1b2b; color: #fff;
     font-family: -apple-system, "Hiragino Sans", "Segoe UI", sans-serif; overflow: hidden; touch-action: manipulation; }
-  #machine { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; padding: 2vh; }
-  #panel { width: min(94vw, 900px); display: flex; justify-content: space-between; align-items: center;
+  /* ---- 横向きレイアウト ----
+     --H = リール窓の高さ。画面の高さと幅の両方に収まる大きさにする。
+     横幅は「キャラ(高さの約0.75倍) + リール(高さの1.37倍)」で約2.15倍 */
+  :root {
+    --H: min(calc(100vh - 310px), calc((96vw - 80px) / 2.15));
+    --W: calc(var(--H) * 2.15 + 60px);   /* 全体の横幅 */
+  }
+  @supports (height: 100dvh) {
+    :root { --H: min(calc(100dvh - 310px), calc((96vw - 80px) / 2.15)); }
+  }
+  #machine { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5vh; padding: 1.5vh; }
+  #stage { display: flex; align-items: flex-end; justify-content: center; gap: 1.5vw; width: var(--W); }
+  #chara { display: block; height: calc(var(--H) + 24px); width: auto; flex-shrink: 0;
+    filter: drop-shadow(0 6px 12px #000a); visibility: hidden; }
+  #chara.ready { visibility: visible; }
+  #panel { width: var(--W); display: flex; justify-content: space-between; align-items: center;
     background: #000; border-radius: 10px; padding: 10px 16px; font-size: clamp(14px, 2.2vw, 22px); }
   #result { font-weight: bold; color: #ffd84a; min-height: 1.3em; }
   #debug { color: #8fd; font-size: 0.8em; text-align: right; }
   #frame { background: linear-gradient(#c9a640, #8a6a16); padding: 12px; border-radius: 16px; box-shadow: 0 8px 30px #000a; }
-  #reels { display: block; width: min(90vw, 64vh * 1.37, 860px); aspect-ratio: 1.37; background: #222; border-radius: 6px; }
-  #controls { width: min(94vw, 900px); display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
-  #lever { width: clamp(64px, 12vw, 130px); height: clamp(64px, 12vw, 130px); border-radius: 50%; border: none;
+  #reels { display: block; height: var(--H); width: calc(var(--H) * 1.37); background: #222; border-radius: 6px; }
+  #controls { width: var(--W); display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
+  #lever { width: clamp(60px, min(12vw, 13vh), 120px); height: clamp(60px, min(12vw, 13vh), 120px); border-radius: 50%; border: none;
     background: radial-gradient(circle at 35% 30%, #ff6b6b, #b00000); color: #fff; font-weight: bold; font-size: clamp(14px, 2vw, 20px);
     box-shadow: 0 6px 0 #600, 0 8px 16px #0008; }
   #lever:active, #lever.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #600; }
   #stops { display: flex; gap: 2vw; }
-  .stop { width: clamp(56px, 12vw, 140px); height: clamp(52px, 10vw, 100px); border-radius: 14px; border: none;
+  .stop { width: clamp(56px, 12vw, 140px); height: clamp(48px, min(10vw, 11vh), 90px); border-radius: 14px; border: none;
     background: #444; color: #888; font-weight: bold; font-size: clamp(14px, 2vw, 20px); box-shadow: 0 6px 0 #222; }
   .stop.on { background: radial-gradient(circle at 50% 35%, #8cf, #1060d0); color: #fff; box-shadow: 0 6px 0 #003, 0 0 18px #4af; }
   .stop.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #003; }
@@ -51,7 +65,7 @@
   #lendBtn { background: #2e7d32; }
   #settleBtn { background: #6d4c41; }
   #leftCtl { display: flex; align-items: center; gap: 2vw; }
-  #maxbet { width: clamp(54px, 10vw, 100px); height: clamp(54px, 10vw, 100px); border-radius: 50%; border: none;
+  #maxbet { width: clamp(54px, min(10vw, 11vh), 100px); height: clamp(54px, min(10vw, 11vh), 100px); border-radius: 50%; border: none;
     background: #555; color: #999; font-weight: bold; font-size: clamp(12px, 1.7vw, 17px); box-shadow: 0 5px 0 #222; }
   #maxbet.on { background: radial-gradient(circle at 35% 30%, #fff59d, #f9a825); color: #4a3000; box-shadow: 0 5px 0 #7a5200, 0 0 16px #fc0; }
   #maxbet.pressed { transform: translateY(4px); box-shadow: 0 1px 0 #7a5200; }
@@ -81,7 +95,10 @@
       <label><input type="checkbox" id="showFlag" checked> フラグ表示</label>
     </div>
   </div>
-  <div id="frame"><canvas id="reels"></canvas></div>
+  <div id="stage">
+    <img id="chara" alt="しゃちのすけ">
+    <div id="frame"><canvas id="reels"></canvas></div>
+  </div>
   <div id="controls">
     <div id="leftCtl">
       <button id="maxbet">MAX<br>BET</button>
@@ -696,6 +713,69 @@ function loadSymbolImage(sym, name, extIndex = 0) {
 }
 
 for (const [sym, name] of Object.entries(SYMBOL_FILES)) loadSymbolImage(sym, name);
+
+// ---- キャラクター画像（リールの左） ----
+//  元画像は背景のチェック柄（透明っぽく見える格子）が絵として描き込まれているので、
+//  画像の外周からつながっている「白〜明るい灰色」の部分を透明にしてから表示する。
+//  キャラは黒い輪郭で囲まれているので、白いお腹や目は消えない。
+//  本当に背景が透明な PNG に差し替えた場合は、この処理は何もしないのと同じになる。
+const CHARA_SRC = 'shachinosuke.webp';
+const charaEl = document.getElementById('chara');
+
+function removeFakeBackground(img) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const c = cv.getContext('2d');
+  c.drawImage(img, 0, 0);
+  const data = c.getImageData(0, 0, w, h);
+  const p = data.data;
+  const isBg = k => {   // 白〜明るい灰色で、色味が少ない画素
+    const i = k * 4, r = p[i], g = p[i + 1], b = p[i + 2];
+    return p[i + 3] > 0 && Math.min(r, g, b) >= 150 && Math.max(r, g, b) - Math.min(r, g, b) <= 30;
+  };
+  // 外周から塗りつぶし（つながっている背景だけを透明にする）
+  const seen = new Uint8Array(w * h);
+  const stack = [];
+  const visit = k => { if (!seen[k] && isBg(k)) { seen[k] = 1; stack.push(k); } };
+  for (let x = 0; x < w; x++) { visit(x); visit((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { visit(y * w); visit(y * w + w - 1); }
+  while (stack.length) {
+    const k = stack.pop();
+    p[k * 4 + 3] = 0;
+    const x = k % w;
+    if (x > 0) visit(k - 1);
+    if (x < w - 1) visit(k + 1);
+    if (k >= w) visit(k - w);
+    if (k < w * (h - 1)) visit(k + w);
+  }
+  // 輪郭のまわりに残った明るいフチを2回削る
+  for (let pass = 0; pass < 2; pass++) {
+    const del = [];
+    for (let k = 0; k < w * h; k++) {
+      const i = k * 4;
+      if (p[i + 3] === 0) continue;
+      const x = k % w;
+      const nearClear = (x > 0 && p[i - 4 + 3] === 0) || (x < w - 1 && p[i + 4 + 3] === 0) ||
+                        (k >= w && p[i - w * 4 + 3] === 0) || (k < w * (h - 1) && p[i + w * 4 + 3] === 0);
+      if (nearClear && Math.min(p[i], p[i + 1], p[i + 2]) >= 120) del.push(i);
+    }
+    for (const i of del) p[i + 3] = 0;
+  }
+  c.putImageData(data, 0, 0);
+  return cv.toDataURL('image/png');
+}
+
+(function loadChara() {
+  const img = new Image();
+  img.onload = () => {
+    try { charaEl.src = removeFakeBackground(img); }
+    catch (e) { charaEl.src = img.src; }   // 加工できない環境ではそのまま表示
+    charaEl.classList.add('ready');
+  };
+  img.onerror = () => { charaEl.style.display = 'none'; };   // 画像が無ければリールだけ
+  img.src = CHARA_SRC;
+})();
 
 function reelX(i) { return gap + i * (cellW + gap); }
 

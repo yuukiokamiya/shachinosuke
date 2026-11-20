@@ -111,8 +111,8 @@
     animation: chanceBlink 1s infinite; }
   #chanceBtn.pressed { transform: translateY(2px); }
   @keyframes chanceBlink { 50% { box-shadow: 0 0 14px #ce93d8; } }
-  #autoBtn { width: clamp(40px, 6vh, 52px); height: clamp(40px, 6vh, 52px); border-radius: 50%; border: 2px solid #777;
-    background: #333; color: #aaa; font-weight: bold; font-size: clamp(10px, 1.5vh, 13px); padding: 0; }
+  #autoBtn { width: clamp(40px, 6vh, 52px); height: clamp(28px, 4vh, 34px); border-radius: 14px; border: 2px solid #777;
+    background: #333; color: #aaa; font-weight: bold; font-size: clamp(8px, 1.2vh, 10px); padding: 0; }
   #autoBtn.on { background: radial-gradient(circle at 40% 35%, #b9f6ca, #00c853); color: #003d16; border-color: #b9f6ca;
     animation: autoBlink 1s infinite; }
   #autoBtn.pressed { transform: translateY(2px); }
@@ -121,7 +121,12 @@
   /* 停止ボタン（各リールの真下に配置） */
   #stops { grid-column: 2; grid-row: 2; display: grid; grid-template-columns: repeat(3, 1fr);
     column-gap: calc(var(--H) * 1.37 * 0.02); padding: 0 calc(12px + var(--H) * 1.37 * 0.02);
-    justify-items: center; align-items: center; }
+    justify-items: center; align-items: start; position: relative; }
+  /* オート中の説明（停止ボタンのすぐ下。段の下の空きに重ねて置くのでレイアウトは変わらない） */
+  #autoStatus { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; white-space: nowrap;
+    font-size: clamp(11px, 1.7vh, 14px); font-weight: bold; pointer-events: none; }
+  #autoStatus.hot { color: #69f0ae; }
+  #autoStatus.chance { color: #e1bee7; }
   .stop { position: relative; width: calc(var(--H) * 0.2); aspect-ratio: 1.45; border: none; border-radius: 12px; padding: 0;
     background: linear-gradient(#e3e6ea, #8a9097 60%, #5d6268); box-shadow: 0 5px 0 #33363a, 0 8px 14px #0009; }
   .stop::before { content: ''; position: absolute; inset: 15%; border-radius: 8px;
@@ -218,6 +223,7 @@
       <button class="stop" data-reel="0" aria-label="左停止"></button>
       <button class="stop" data-reel="1" aria-label="中停止"></button>
       <button class="stop" data-reel="2" aria-label="右停止"></button>
+      <div id="autoStatus"></div>
     </div>
   </div>
 </div>
@@ -1196,8 +1202,87 @@ const Sound = (() => {
     src.start(now); src.stop(now + dur + 0.05);
   }
 
+  // ---- ギター（ひずませたノコギリ波）とドラム ----
+  let distCurve = null;
+  function distortion() {   // 波形をつぶしてひずませる（エレキギターらしさ）
+    if (distCurve) return distCurve;
+    const n = 1024, k = 60;
+    distCurve = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const x = i * 2 / n - 1; distCurve[i] = (3 + k) * x * 20 * Math.PI / 180 / (Math.PI + k * Math.abs(x)); }
+    return distCurve;
+  }
+  // パワーコード（ルート・5度・オクターブ）を鳴らす。mute=true でブリッジミュートの「ズッ」
+  function guitar({ root, t = 0, dur = 0.3, vol = 0.12, mute = false, vibrato = false }) {
+    const c = ensure(); if (!c) return;
+    const now = c.currentTime + t;
+    const shaper = c.createWaveShaper(); shaper.curve = distortion(); shaper.oversample = '4x';
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = mute ? 900 : 3200;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(vol, now + 0.006);
+    g.gain.setValueAtTime(vol, now + dur * (mute ? 0.3 : 0.7));
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    const pre = c.createGain(); pre.gain.value = 0.6;
+    pre.connect(shaper); shaper.connect(lp); lp.connect(g); g.connect(master);
+    for (const ratio of [1, 1.5, 2]) {
+      for (const detune of [-7, 7]) {   // 2本ずらして重ねると太い音になる
+        const o = c.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = root * ratio;
+        o.detune.value = detune;
+        if (vibrato) {
+          const lfo = c.createOscillator(), lg = c.createGain();
+          lfo.frequency.value = 6; lg.gain.value = 18;
+          lfo.connect(lg); lg.connect(o.detune);
+          lfo.start(now + 0.25); lfo.stop(now + dur + 0.05);
+        }
+        o.connect(pre); o.start(now); o.stop(now + dur + 0.05);
+      }
+    }
+  }
+  function kick(t, vol = 0.7) { tone({ type: 'sine', f0: 150, f1: 45, dur: 0.18, t, vol }); }
+  function snare(t, vol = 0.35) { noise({ t, dur: 0.14, vol, freq: 1800, filter: 'bandpass', q: 0.7 }); tone({ type: 'triangle', f0: 220, f1: 160, dur: 0.08, t, vol: vol * 0.5 }); }
+  function hihat(t, vol = 0.12) { noise({ t, dur: 0.04, vol, freq: 8000, filter: 'highpass' }); }
+  function crash(t, vol = 0.3) { noise({ t, dur: 1.2, vol, freq: 6000, filter: 'highpass' }); }
+  function bass(root, t, dur, vol = 0.25) { tone({ type: 'triangle', f0: root / 2, dur, t, vol, attack: 0.004 }); }
+
+  // ---- ボーナスゲーム中のロック調の曲（2小節を繰り返す） ----
+  //  テンポ150。16分音符ごとに少し先まで予約していく（音が途切れないように）
+  const BPM = 150, STEP = 60 / BPM / 4, STEPS = 32;
+  const E2 = 82.41, G2 = 98.0, A2 = 110.0, D3 = 146.83;
+  // 小節ごとのコード（16分音符8個ずつ）
+  const CHORDS = [E2, E2, G2, A2];
+  let musicTimer = null, nextTime = 0, step = 0;
+  function scheduleStep(s, t) {
+    const at = t - ensure().currentTime;
+    const root = CHORDS[Math.floor(s / 8)];
+    if ([0, 3, 8, 11, 16, 19, 24, 27].includes(s)) kick(at);
+    if (s % 8 === 4) snare(at);
+    if (s % 2 === 0) hihat(at, s % 4 === 0 ? 0.12 : 0.07);
+    // ギター：8分で刻み、各コードの頭だけしっかり鳴らす
+    if (s % 8 === 0) guitar({ root, t: at, dur: STEP * 3.5, vol: 0.09 });
+    else if (s % 2 === 0) guitar({ root, t: at, dur: STEP * 0.9, vol: 0.07, mute: true });
+    if (s === 30) guitar({ root: D3, t: at, dur: STEP * 1.8, vol: 0.08 });   // 最後に1音だけ高いコードで次へつなぐ
+    if (s % 2 === 0) bass(root, at, STEP * 1.6);
+    if (s === 0) crash(at, 0.18);
+  }
+
   return {
     unlock() { ensure(); },
+    // ボーナスゲーム中の曲
+    isMusicPlaying() { return !!musicTimer; },
+    startMusic() {
+      const c = ensure(); if (!c || musicTimer) return;
+      nextTime = c.currentTime + 0.05; step = 0;
+      musicTimer = setInterval(() => {
+        while (nextTime < c.currentTime + 0.12) {
+          scheduleStep(step, nextTime);
+          nextTime += STEP;
+          step = (step + 1) % STEPS;
+        }
+      }, 25);
+    },
+    stopMusic() { clearInterval(musicTimer); musicTimer = null; },
     isMuted() { return muted; },
     setMuted(m) {
       muted = m;
@@ -1230,17 +1315,28 @@ const Sound = (() => {
         [2093, 2637, 3136, 4186].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.18, t: 0.4 + i * 0.07, vol: 0.2 }));
       }
     },
-    // ボーナスがそろった：ファンファーレ
+    // ボーナスがそろった：ギターのリフ「ジャッ・ジャッ・ジャッ・ジャーン」
     bonus() {
-      [523, 659, 784, 1047].forEach((f, i) => tone({ type: 'square', f0: f, dur: 0.12, t: i * 0.11, vol: 0.15 }));
-      [1047, 1319, 1568].forEach(f => tone({ type: 'triangle', f0: f, dur: 1.1, t: 0.46, vol: 0.18, attack: 0.03 }));
-      tone({ type: 'square', f0: 523, dur: 1.1, t: 0.46, vol: 0.06, attack: 0.03 });
+      guitar({ root: E2, t: 0.00, dur: 0.16, vol: 0.13 });
+      guitar({ root: E2, t: 0.18, dur: 0.16, vol: 0.13 });
+      guitar({ root: G2, t: 0.36, dur: 0.16, vol: 0.13 });
+      guitar({ root: A2, t: 0.54, dur: 0.18, vol: 0.13 });
+      kick(0); kick(0.18); kick(0.36); kick(0.54);
+      guitar({ root: E2 * 2, t: 0.76, dur: 1.4, vol: 0.14, vibrato: true });   // 最後は高いEを伸ばしてビブラート
+      guitar({ root: E2, t: 0.76, dur: 1.4, vol: 0.10 });
+      kick(0.76, 0.8); crash(0.76, 0.35);
     },
   };
 })();
 // 最初に画面やキーを触ったときに音を使えるようにする（iPad の決まり）
-window.addEventListener('pointerdown', () => Sound.unlock(), true);
-window.addEventListener('keydown', () => Sound.unlock(), true);
+const BONUS_MUSIC_DELAY = 2100;   // そろったときのリフが終わってから曲を始めるまで（ミリ秒）
+// ボーナスゲームの途中で読み込み直したときは、最初に触ったときに曲を再開する
+function unlockSound() {
+  Sound.unlock();
+  if (logic.bonusGame && !Sound.isMusicPlaying()) Sound.startMusic();
+}
+window.addEventListener('pointerdown', unlockSound, true);
+window.addEventListener('keydown', unlockSound, true);
 
 // ---- カットイン ----
 //  弱＝青、強＝赤、確定＝稲妻。レバーON時にリール枠の上へ CUTIN_MS ミリ秒表示する。
@@ -1411,7 +1507,11 @@ function pressStop(i) {
 
 function onAllStopped() {
   wins = logic.finishGame();
-  if (logic.events.includes('BONUS_START')) Sound.bonus();   // ボーナスがそろった
+  if (logic.events.includes('BONUS_START')) {   // ボーナスがそろった：ギターのリフのあとにボーナス曲
+    Sound.bonus();
+    setTimeout(() => { if (logic.bonusGame) Sound.startMusic(); }, BONUS_MUSIC_DELAY);
+  }
+  if (logic.events.includes('BONUS_END')) Sound.stopMusic();   // ボーナスゲーム終了で曲を止める
   const texts = wins.map(w => w.pay ? `${w.role.name} ${w.pay}枚` : w.role.name).concat(eventMessages());
   resultEl.textContent = texts.join(' / ');
   // 払い出し（1枚ずつクレジットへ）
@@ -1490,6 +1590,10 @@ const AUTO_GAME_GAP = 250;   // 次のゲームまでの間（ミリ秒）
 const autoBtn = document.getElementById('autoBtn');
 const chanceBtn = document.getElementById('chanceBtn');
 let autoMode = null, autoRunning = false;   // autoMode: null / 'hot' / 'chance'
+const AUTO_STATUS_TEXT = {
+  hot: 'AUTO中：小役2連・チェリー・しゃちのすけチャンス・ボーナス確定で止まります（もう一度押すと停止）',
+  chance: 'CHANCE中：しゃちのすけチャンス（またはボーナス確定）まで自動で進みます（もう一度押すと停止）',
+};
 
 // 今の状態で止まるべきなら理由を返す
 function hotReason(mode = autoMode) {
@@ -1508,6 +1612,10 @@ function setAuto(mode) {
   autoMode = mode || null;
   autoBtn.classList.toggle('on', autoMode === 'hot');
   chanceBtn.classList.toggle('on', autoMode === 'chance');
+  // 停止ボタンの下に、どんなオートか表示する
+  const status = document.getElementById('autoStatus');
+  status.className = autoMode || '';
+  status.textContent = AUTO_STATUS_TEXT[autoMode] || '';
   if (autoMode) autoLoop();
 }
 // ボタン：同じボタンをもう一度押すと止まる。もう片方を押すとそちらに切り替わる
@@ -1528,7 +1636,8 @@ async function autoLoop() {
       if (!autoMode) break;
       if (!replayBet && bet < BET_MAX && medals.credit + medals.hand < BET_MAX) { stopAuto('メダル不足'); break; }
       pullLever();
-      while (autoMode && !(reels.every(r => r.state === 'spin') && !cutinActive())) await sleep(30);
+      // 途中で AUTO を切っても、レバーを叩いたゲームは最後まで自動で止める
+      while (!(reels.every(r => r.state === 'spin') && !cutinActive())) await sleep(30);
       for (let i = 0; i < 3; i++) { await sleep(AUTO_STOP_GAP); pressStop(i); }
       while (!canOperate()) await sleep(50);                       // 停止と払い出しを待つ（AUTOを切っても今のゲームは終える）
       const reason = hotReason();

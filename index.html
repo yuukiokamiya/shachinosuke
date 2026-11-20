@@ -33,6 +33,10 @@
   .disp { display: flex; flex-direction: column; align-items: center; font-size: 0.6em; color: #aaa; }
   .seg { font-family: "Courier New", monospace; font-weight: bold; font-size: 2.2em; line-height: 1;
     color: #ff3b2f; background: #1a0000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; text-shadow: 0 0 8px #f00a; }
+  .seg { display: flex; gap: 1px; }
+  .digit { display: inline-block; height: 1em; overflow: hidden; }
+  .strip { display: flex; flex-direction: column; transition: transform 0.07s ease-out; }
+  .strip span { height: 1em; line-height: 1em; text-align: center; }
   #betLamps { display: flex; gap: 6px; padding: 6px 0; }
   .lamp { width: 1.3em; height: 1.3em; border-radius: 50%; background: #332; border: 2px solid #554; font-size: 1.2em; }
   .lamp.on { background: radial-gradient(circle at 40% 35%, #fff6a0, #ffb300); border-color: #ffd54f; box-shadow: 0 0 10px #ffb300; }
@@ -55,10 +59,10 @@
   <div id="panel">
     <div class="row">
       <div id="displays">
-        <div class="disp"><span class="seg" id="creditDisp">00</span>CREDIT</div>
+        <div class="disp"><span class="seg" id="creditDisp"></span>CREDIT</div>
         <div class="disp"><div id="betLamps"><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span></div>BET</div>
         <div class="disp"><span id="replayLamp">REPLAY</span></div>
-        <div class="disp"><span class="seg" id="payDisp">00</span>PAY</div>
+        <div class="disp"><span class="seg" id="payDisp"></span>PAY</div>
       </div>
       <div id="result"></div>
     </div>
@@ -379,8 +383,91 @@ let payQueue = 0;       // これから払い出す枚数
 let payShown = 0;       // 今回払い出した枚数（PAY表示）
 let payTimer = 0;
 
-const creditDisp = document.getElementById('creditDisp');
-const payDisp = document.getElementById('payDisp');
+// ---- 数字が縦に回るカウンター表示 ----
+//  set(値) で目標値を決めると、1ずつ数字を回しながら近づく。
+//  増えるときは数字が上へ、減るときは下へ流れる。
+const COUNT_STEP = 0.05;      // 1カウントの間隔（秒）
+const COUNT_STEP_FAST = 0.025;// 差が大きいとき（貸出など）の間隔
+class RollCounter {
+  constructor(el, digits = 2) {
+    this.digits = [];
+    for (let i = 0; i < digits; i++) {
+      const d = document.createElement('span');
+      d.className = 'digit';
+      const strip = document.createElement('span');
+      strip.className = 'strip';
+      // 0〜9 の下にもう一つ 0 を置き、9→0 / 0→9 を途切れずに回せるようにする
+      for (let n = 0; n <= 10; n++) {
+        const s = document.createElement('span');
+        s.textContent = n % 10;
+        strip.appendChild(s);
+      }
+      strip.addEventListener('transitionend', () => {
+        if (this.digits[i].pos === 10) this.snap(i, 0);   // 一番下の 0 から上の 0 へ瞬間移動
+      });
+      d.appendChild(strip);
+      el.appendChild(d);
+      this.digits.push({ strip, pos: 0 });
+    }
+    this.shown = 0;
+    this.target = 0;
+    this.timer = 0;
+  }
+
+  move(i, pos) {
+    this.digits[i].pos = pos;
+    this.digits[i].strip.style.transform = `translateY(${-pos}em)`;
+  }
+
+  snap(i, pos) {   // アニメーションなしで位置を変える
+    const s = this.digits[i].strip;
+    s.style.transition = 'none';
+    this.move(i, pos);
+    void s.offsetHeight;
+    s.style.transition = '';
+  }
+
+  digitsOf(v) {
+    return String(v).padStart(this.digits.length, '0').slice(-this.digits.length).split('').map(Number);
+  }
+
+  // 1桁を dir の向き（+1 上へ / -1 下へ）に回して to にする
+  roll(i, to, dir) {
+    let from = this.digits[i].pos;
+    if (from === 10) { this.snap(i, 0); from = 0; }
+    if (to === from) return;
+    if (dir > 0 && from === 9 && to === 0) this.move(i, 10);          // 9 → 下の0 へ
+    else if (dir < 0 && from === 0 && to === 9) { this.snap(i, 10); this.move(i, 9); } // 下の0 → 9
+    else this.move(i, to);
+  }
+
+  render(dir) {
+    this.digitsOf(this.shown).forEach((n, i) => this.roll(i, n, dir));
+  }
+
+  set(v) { this.target = v; }
+
+  jump(v) {   // 回さずに即座に表示を変える
+    this.shown = this.target = v;
+    this.digitsOf(v).forEach((n, i) => this.snap(i, n));
+  }
+
+  update(dt) {
+    const diff = this.target - this.shown;
+    const interval = Math.abs(diff) > 10 ? COUNT_STEP_FAST : COUNT_STEP;
+    if (diff === 0) { this.timer = interval; return; }   // 次の変化は1カウント目をすぐ出す
+    this.timer += dt;
+    while (this.timer >= interval && this.shown !== this.target) {
+      this.timer -= interval;
+      const dir = Math.sign(this.target - this.shown);
+      this.shown += dir;
+      this.render(dir);
+    }
+  }
+}
+
+const creditCounter = new RollCounter(document.getElementById('creditDisp'));
+const payCounter = new RollCounter(document.getElementById('payDisp'));
 const betLamps = [...document.querySelectorAll('#betLamps .lamp')];
 const replayLamp = document.getElementById('replayLamp');
 const statsEl = document.getElementById('stats');
@@ -400,8 +487,9 @@ function addToCredit(n) {
 }
 
 function renderMedals() {
-  creditDisp.textContent = String(medals.credit).padStart(2, '0');
-  payDisp.textContent = String(payShown).padStart(2, '0');
+  creditCounter.set(medals.credit);
+  if (payShown === 0) payCounter.jump(0);   // PAY は新しいゲームで即0に戻す
+  else payCounter.set(payShown);
   betLamps.forEach((l, i) => l.classList.toggle('on', i < bet));
   replayLamp.classList.toggle('on', replayBet);
   maxBetBtn.classList.toggle('on', canOperate() && bet < BET_MAX && medals.credit + medals.hand >= BET_MAX - bet);
@@ -715,6 +803,8 @@ function update(dt) {
     if (reels.every(r => r.state === 'stopped')) onAllStopped();
   }
   updatePayout(dt);
+  creditCounter.update(dt);
+  payCounter.update(dt);
 }
 
 let last = performance.now();
@@ -754,6 +844,7 @@ window.addEventListener('keydown', e => {
 
 window.addEventListener('resize', resize);
 resize();
+creditCounter.jump(medals.credit);   // 起動時は回さずに表示
 renderMedals();
 resultEl.textContent = medals.credit + medals.hand >= BET_MAX
   ? 'MAX BET → レバーで開始' : '貸出ボタンでメダルを借りてください';

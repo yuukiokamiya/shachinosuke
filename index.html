@@ -57,6 +57,30 @@
   #tickerText { position: absolute; left: 0; top: 50%; transform: translateY(-50%); white-space: nowrap;
     color: #ffd84a; font-weight: bold; font-size: 14px; line-height: 1; }
 
+  /* チャンスの場面でリール枠を光らせる
+     赤7チャンス・青7チャンス：蛍のようにゆっくり明滅 / しゃちのすけチャンス：紫で高速点滅 */
+  #frame.glow-red { animation: fireflyRed 1.8s ease-in-out infinite; }
+  #frame.glow-blue { animation: fireflyBlue 1.8s ease-in-out infinite; }
+  #frame.glow-purple { animation: flashPurple 0.22s steps(1, end) infinite; }
+  @keyframes fireflyRed {
+    0%, 100% { box-shadow: 0 8px 30px #000a, 0 0 0 0 #ff1a1a00; filter: none; }
+    50% { box-shadow: 0 8px 30px #000a, 0 0 28px 10px #ff1a1aee, inset 0 0 18px #ff4d4dcc; filter: drop-shadow(0 0 6px #ff3030); }
+  }
+  @keyframes fireflyBlue {
+    0%, 100% { box-shadow: 0 8px 30px #000a, 0 0 0 0 #2f7bff00; filter: none; }
+    50% { box-shadow: 0 8px 30px #000a, 0 0 28px 10px #2f7bffee, inset 0 0 18px #5c9bffcc; filter: drop-shadow(0 0 6px #3d86ff); }
+  }
+  @keyframes flashPurple {
+    0% { box-shadow: 0 8px 30px #000a, 0 0 30px 12px #c040ffee, inset 0 0 20px #d47bffdd; }
+    50% { box-shadow: 0 8px 30px #000a, 0 0 0 0 #c040ff00; }
+  }
+
+  /* 小役の履歴（リール枠の下の縁。左が古く右が最新） */
+  #flagHistory { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); display: flex; gap: 6px;
+    padding: 3px 10px; background: #000d; border: 1px solid #c9a640; border-radius: 12px; z-index: 6; pointer-events: none; }
+  .fh-dot { width: 13px; height: 13px; border-radius: 50%; background: #2a2a2a; border: 1px solid #555; box-sizing: border-box; }
+  .fh-dot.latest { box-shadow: 0 0 0 2px #fff8; }
+
   /* スランプグラフ */
   #graphModal { position: fixed; inset: 0; background: #000b; display: none; align-items: center; justify-content: center; z-index: 50; }
   #graphModal.open { display: flex; }
@@ -211,7 +235,8 @@
       <img id="chara" alt="しゃちのすけ">
     </div>
     <div id="frame"><canvas id="reels"></canvas><div id="cutin"><img alt=""></div>
-      <div id="ticker"><span id="tickerText"></span></div></div>
+      <div id="ticker"><span id="tickerText"></span></div>
+      <div id="flagHistory" aria-label="小役の履歴（左が古く右が最新）"></div></div>
     <div id="leverBox">
       <button id="lever" aria-label="レバー"><span class="lv-base"></span><span class="lv-arm"><span class="lv-knob"></span></span></button>
       <div id="autoBtns">
@@ -306,7 +331,7 @@
   //  ボーナスは下の「ゲーム性」のルートからだけ発生させるので、直接抽選は入れていない。
   //  直接抽選も入れたいときは { flag: 'BIG_RED', n: 273 } のように足す。
   const FLAG_TABLE = [
-    { flag: 'REPLAY', n: 10082 }, // 約 1/6.5
+    { flag: 'REPLAY', n: 13107 }, // 1/5（しゃちのすけチャンスが来やすいように）
     { flag: 'BELL',   n: 9362  }, // 約 1/7
     { flag: 'ORANGE', n: 2341  }, // 約 1/28
     { flag: 'CHERRY', n: 1638  }, // 約 1/40
@@ -321,18 +346,18 @@
   const BONUS_FLAGS = ['BIG_BLUE', 'BIG_RED', 'REG'];
   const CHANCE_ROLES = ['BELL', 'ORANGE', 'CHERRY'];  // チャンス中にプレミアムになる小役
   // 調整用の数値（ここを変えるとゲームバランスが変わる）
-  //  今の値で機械割 約102%（完璧な目押し）になるよう調整済み
+  //  今の値で機械割 約105%（完璧な目押し）になるよう調整済み
   const CONFIG = {
     STREAK_TO_BONUS: 3,     // 同じ小役が何ゲーム連続で成立したら発動するか
-    CHERRY_TO_ORANGE: 0.73, // チェリー成立 → 次ゲームがオレンジになる確率
-    ORANGE_CHAIN: 0.68,     // オレンジ成立 → 次ゲームもオレンジになる確率
+    CHERRY_TO_ORANGE: 0.74, // チェリー成立 → 次ゲームがオレンジになる確率
+    ORANGE_CHAIN: 0.69,     // オレンジ成立 → 次ゲームもオレンジになる確率
     PREMIUM_LOOP: 0.8,      // プレミアム後、ボーナスが終わるたびに青7 BIG が続く確率
     // ボーナスゲーム：毎ゲームベルが成立して BONUS_PAY 枚。払い出しの合計が END を「超えたら」終了
-    //  BIG_END 90 → 15枚×7ゲーム＝105枚（純増84枚）、REG_END 45 → 15枚×4ゲーム＝60枚（純増48枚）
+    //  BIG_END 75 → 15枚×6ゲーム＝90枚（純増72枚）、REG_END 60 → 15枚×5ゲーム＝75枚（純増60枚）
     //  通常時のベル・オレンジは1枚なので、出玉の大半はボーナスから
     BONUS_PAY: 15,
-    BIG_END: 90,
-    REG_END: 45,
+    BIG_END: 75,
+    REG_END: 60,
     // カットイン：小役が2連続した次のゲームのレバーONで抽選。割合は [なし, 弱, 強, 確定]
     CUTIN_HIT:  [1, 2, 5, 7],   // そのゲームで3連続が成立したとき
     CUTIN_MISS: [10, 4, 1, 0],  // 3連続が成立しなかったとき
@@ -1523,6 +1548,8 @@ function onAllStopped() {
   updatePaytableHighlight();
   bet = replayBet ? BET_MAX : 0;
   recordSlump();
+  recordFlagHistory();
+  updateFrameGlow();
   renderMedals();
 }
 
@@ -1657,6 +1684,59 @@ const soundBtn = document.getElementById('soundBtn');
 const renderSoundBtn = () => { soundBtn.textContent = Sound.isMuted() ? '🔇' : '🔊'; };
 bindPress(soundBtn, () => { Sound.setMuted(!Sound.isMuted()); renderSoundBtn(); });
 renderSoundBtn();
+
+// ---- チャンスの場面でリール枠を光らせる ----
+//  ゲームが終わったときに判定し、次のチャンスのゲームの結果が出るまで光らせ続ける。
+//   オレンジ2連 → 赤7チャンス（赤） / ベル2連 → 青7チャンス（青） / リプレイ3連 → しゃちのすけチャンス（紫・高速）
+const frameEl = document.getElementById('frame');
+function chanceGlow() {
+  if (logic.bonusFlag || logic.bonusGame) return null;      // ボーナス中は光らせない
+  if (logic.chance) return 'purple';
+  if (logic.streakCount === SlotLogicLib.CONFIG.STREAK_TO_BONUS - 1) {
+    if (logic.streakFlag === 'ORANGE') return 'red';
+    if (logic.streakFlag === 'BELL') return 'blue';
+  }
+  return null;
+}
+function updateFrameGlow() {
+  const g = chanceGlow();
+  frameEl.classList.remove('glow-red', 'glow-blue', 'glow-purple');
+  if (g) frameEl.classList.add(`glow-${g}`);
+}
+
+// ---- 小役の履歴（リール枠の下に丸を並べる） ----
+//  そのゲームで成立した小役のフラグを色で記録。ボーナスがそろったゲームはボーナスの色。
+//  ボーナスゲーム中は毎回ベルなので記録しない。記録はメダルと一緒にブラウザに保存。
+const FLAG_HISTORY_LEN = 10;
+const FLAG_HISTORY_COLOR = {
+  REPLAY: '#4fc3f7', BELL: '#ffd600', ORANGE: '#ff9100', CHERRY: '#f48fb1',
+  BIG_RED: '#e53935', BIG_BLUE: '#1e63ff', REG: '#9e9e9e',
+};
+const FLAG_HISTORY_NAME = { ...FLAG_NAMES, REG: 'REG（BAR）' };
+const flagHistoryEl = document.getElementById('flagHistory');
+if (!Array.isArray(medals.flagHistory)) medals.flagHistory = [];
+
+function renderFlagHistory() {
+  const h = medals.flagHistory;
+  const slots = Array.from({ length: FLAG_HISTORY_LEN }, (_, i) => h[h.length - FLAG_HISTORY_LEN + i]);
+  flagHistoryEl.innerHTML = '';
+  slots.forEach((f, i) => {
+    const d = document.createElement('span');
+    d.className = 'fh-dot' + (i === FLAG_HISTORY_LEN - 1 && h.length ? ' latest' : '');
+    if (f) { d.style.background = FLAG_HISTORY_COLOR[f]; d.style.borderColor = FLAG_HISTORY_COLOR[f]; }
+    d.title = f === undefined ? '' : (f ? FLAG_HISTORY_NAME[f] : 'ハズレ');
+    flagHistoryEl.appendChild(d);
+  });
+}
+function recordFlagHistory() {
+  if (logic.inBonusNow) return;                     // ボーナスゲーム中は記録しない
+  const entry = logic.events.includes('BONUS_START') ? logic.bonusGame.type : (gameInfo.smallFlag || null);
+  medals.flagHistory.push(entry);
+  if (medals.flagHistory.length > FLAG_HISTORY_LEN) medals.flagHistory.splice(0, medals.flagHistory.length - FLAG_HISTORY_LEN);
+  renderFlagHistory();
+}
+renderFlagHistory();
+updateFrameGlow();   // 読み込み直したときも、チャンス中なら光らせる
 
 // ---- スランプグラフ（10Gごとの差枚） ----
 //  記録は medals.history に [ゲーム数, 差枚] で保存（メダルと一緒にブラウザに残る）

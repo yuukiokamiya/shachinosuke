@@ -16,7 +16,7 @@
     --H: min(calc(100vh - 270px), calc((94vw - 30px) / 1.82));
     --S: calc(var(--H) * 0.45);                   /* 左の列の幅 */
     --W: calc(var(--H) * 1.82 + 24px + 2vw);      /* 全体の横幅 */
-    --CHARA: 0.5;                                  /* キャラの高さ（リール高さに対する割合） */
+    --CHARA: 0.46;                                /* キャラの高さ（リール高さに対する割合） */
   }
   @supports (height: 100dvh) {
     :root { --H: min(calc(100dvh - 270px), calc((94vw - 30px) / 1.82)); }
@@ -52,12 +52,11 @@
 
   /* 配当表（左の列の上） */
   #paytable { width: 100%; margin-bottom: auto; display: flex; flex-direction: column; gap: calc(var(--H) * 0.006);
-    padding: calc(var(--H) * 0.008); border: 2px solid #c9a640; border-radius: 10px; background: #0009;
-    font-size: calc(var(--H) * 0.027); }
+    font-size: calc(var(--H) * 0.036); }
   .pt-row { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 2px 0; border-radius: 6px;
     transition: background 0.3s, box-shadow 0.3s; }
-  .pt-icons { display: flex; gap: 2px; }
-  .pt-icons canvas { width: calc(var(--H) * 0.07); height: calc(var(--H) * 0.053); background: #f2f2f2; border-radius: 3px; }
+  .pt-icons { display: flex; gap: 3px; }
+  .pt-icons canvas { width: calc(var(--H) * 0.1); height: calc(var(--H) * 0.075); background: #f2f2f2; border-radius: 4px; }
   .pt-text { font-weight: bold; color: #ffd84a; white-space: nowrap; }
   .pt-note { font-size: 0.7em; color: #bbb; white-space: nowrap; }
   .pt-row.active { background: #ffd84a33; box-shadow: 0 0 12px #ffd84a; }

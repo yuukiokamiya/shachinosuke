@@ -16,31 +16,70 @@
   #debug { color: #8fd; font-size: 0.8em; text-align: right; }
   #frame { background: linear-gradient(#c9a640, #8a6a16); padding: 12px; border-radius: 16px; box-shadow: 0 8px 30px #000a; }
   #reels { display: block; width: min(90vw, 64vh * 1.37, 860px); aspect-ratio: 1.37; background: #222; border-radius: 6px; }
-  #controls { width: min(94vw, 900px); display: flex; align-items: center; justify-content: space-between; gap: 3vw; }
-  #lever { width: clamp(80px, 13vw, 130px); height: clamp(80px, 13vw, 130px); border-radius: 50%; border: none;
+  #controls { width: min(94vw, 900px); display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
+  #lever { width: clamp(64px, 12vw, 130px); height: clamp(64px, 12vw, 130px); border-radius: 50%; border: none;
     background: radial-gradient(circle at 35% 30%, #ff6b6b, #b00000); color: #fff; font-weight: bold; font-size: clamp(14px, 2vw, 20px);
     box-shadow: 0 6px 0 #600, 0 8px 16px #0008; }
   #lever:active, #lever.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #600; }
-  #stops { display: flex; gap: 3vw; }
-  .stop { width: clamp(80px, 14vw, 140px); height: clamp(60px, 10vw, 100px); border-radius: 14px; border: none;
+  #stops { display: flex; gap: 2vw; }
+  .stop { width: clamp(56px, 12vw, 140px); height: clamp(52px, 10vw, 100px); border-radius: 14px; border: none;
     background: #444; color: #888; font-weight: bold; font-size: clamp(14px, 2vw, 20px); box-shadow: 0 6px 0 #222; }
   .stop.on { background: radial-gradient(circle at 50% 35%, #8cf, #1060d0); color: #fff; box-shadow: 0 6px 0 #003, 0 0 18px #4af; }
   .stop.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #003; }
   label { font-size: 0.8em; color: #aaa; }
+  #panel { flex-direction: column; align-items: stretch; gap: 6px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  #displays { display: flex; align-items: center; gap: clamp(10px, 2.5vw, 28px); }
+  .disp { display: flex; flex-direction: column; align-items: center; font-size: 0.6em; color: #aaa; }
+  .seg { font-family: "Courier New", monospace; font-weight: bold; font-size: 2.2em; line-height: 1;
+    color: #ff3b2f; background: #1a0000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; text-shadow: 0 0 8px #f00a; }
+  #betLamps { display: flex; gap: 6px; padding: 6px 0; }
+  .lamp { width: 1.3em; height: 1.3em; border-radius: 50%; background: #332; border: 2px solid #554; font-size: 1.2em; }
+  .lamp.on { background: radial-gradient(circle at 40% 35%, #fff6a0, #ffb300); border-color: #ffd54f; box-shadow: 0 0 10px #ffb300; }
+  #replayLamp { color: #444; font-weight: bold; font-size: 1.1em; }
+  #replayLamp.on { color: #4fc3f7; text-shadow: 0 0 8px #4fc3f7; }
+  #stats { font-size: 0.75em; color: #ccc; }
+  .small { border: none; border-radius: 8px; padding: 6px 12px; font-weight: bold; font-size: 0.75em; color: #fff; background: #555; }
+  .small.pressed { transform: translateY(2px); }
+  #lendBtn { background: #2e7d32; }
+  #settleBtn { background: #6d4c41; }
+  #leftCtl { display: flex; align-items: center; gap: 2vw; }
+  #maxbet { width: clamp(54px, 10vw, 100px); height: clamp(54px, 10vw, 100px); border-radius: 50%; border: none;
+    background: #555; color: #999; font-weight: bold; font-size: clamp(12px, 1.7vw, 17px); box-shadow: 0 5px 0 #222; }
+  #maxbet.on { background: radial-gradient(circle at 35% 30%, #fff59d, #f9a825); color: #4a3000; box-shadow: 0 5px 0 #7a5200, 0 0 16px #fc0; }
+  #maxbet.pressed { transform: translateY(4px); box-shadow: 0 1px 0 #7a5200; }
 </style>
 </head>
 <body>
 <div id="machine">
   <div id="panel">
-    <div id="result">レバーを叩いてください</div>
-    <div>
-      <div id="debug"></div>
+    <div class="row">
+      <div id="displays">
+        <div class="disp"><span class="seg" id="creditDisp">00</span>CREDIT</div>
+        <div class="disp"><div id="betLamps"><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span></div>BET</div>
+        <div class="disp"><span id="replayLamp">REPLAY</span></div>
+        <div class="disp"><span class="seg" id="payDisp">00</span>PAY</div>
+      </div>
+      <div id="result"></div>
+    </div>
+    <div class="row">
+      <div id="stats"></div>
+      <div>
+        <button class="small" id="lendBtn">貸出 50枚</button>
+        <button class="small" id="settleBtn">精算</button>
+      </div>
+    </div>
+    <div class="row">
+      <div id="debug" style="text-align:left"></div>
       <label><input type="checkbox" id="showFlag" checked> フラグ表示</label>
     </div>
   </div>
   <div id="frame"><canvas id="reels"></canvas></div>
   <div id="controls">
-    <button id="lever">LEVER</button>
+    <div id="leftCtl">
+      <button id="maxbet">MAX<br>BET</button>
+      <button id="lever">LEVER</button>
+    </div>
     <div id="stops">
       <button class="stop" data-reel="0">左</button>
       <button class="stop" data-reel="1">中</button>
@@ -314,6 +353,107 @@ const reels = [0, 1, 2].map(() => ({
 let wins = [];
 let gameInfo = null;
 
+// =================== メダル（クレジット・ベット） ===================
+const CREDIT_MAX = 50;        // クレジットの上限。超えた分は手持ちメダルへ
+const BET_MAX = 3;            // 1ゲームに必要な枚数（5ライン有効）
+const LEND_UNIT = 50;         // 貸出ボタン1回の枚数
+const PAY_MAX = 15;           // 1ゲームの最大払い出し
+const PAYOUT_INTERVAL = 0.06; // 払い出し1枚ごとの間隔（秒）
+const SAVE_KEY = 'shachinosuke-medals';
+
+// メダルの状態はブラウザに保存しておき、再読み込みしても続きから遊べるようにする
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'); } catch (e) { return {}; }
+}
+function save(data) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
+}
+const medals = Object.assign({ credit: 0, hand: 0, invest: 0, games: 0 }, loadSaved());
+// 前回ベットしたまま閉じた場合は、その枚数をクレジットに戻す
+const savedBet = medals.bet || 0;
+delete medals.bet;
+if (savedBet) addToCredit(savedBet);
+let bet = 0;            // 現在のベット枚数
+let replayBet = false;  // リプレイによる自動ベット中（メダルを使わない）
+let payQueue = 0;       // これから払い出す枚数
+let payShown = 0;       // 今回払い出した枚数（PAY表示）
+let payTimer = 0;
+
+const creditDisp = document.getElementById('creditDisp');
+const payDisp = document.getElementById('payDisp');
+const betLamps = [...document.querySelectorAll('#betLamps .lamp')];
+const replayLamp = document.getElementById('replayLamp');
+const statsEl = document.getElementById('stats');
+const maxBetBtn = document.getElementById('maxbet');
+const lendBtn = document.getElementById('lendBtn');
+const settleBtn = document.getElementById('settleBtn');
+
+// リール停止中かつ払い出しが終わっていれば操作できる
+function canOperate() {
+  return reels.every(r => r.state === 'stopped') && payQueue === 0;
+}
+
+function addToCredit(n) {
+  const c = Math.min(n, CREDIT_MAX - medals.credit);
+  medals.credit += c;
+  medals.hand += n - c;
+}
+
+function renderMedals() {
+  creditDisp.textContent = String(medals.credit).padStart(2, '0');
+  payDisp.textContent = String(payShown).padStart(2, '0');
+  betLamps.forEach((l, i) => l.classList.toggle('on', i < bet));
+  replayLamp.classList.toggle('on', replayBet);
+  maxBetBtn.classList.toggle('on', canOperate() && bet < BET_MAX && medals.credit + medals.hand >= BET_MAX - bet);
+  const diff = medals.credit + medals.hand + (replayBet ? 0 : bet) - medals.invest;
+  statsEl.textContent = `手持ち ${medals.hand}枚　投資 ${medals.invest}枚　差枚 ${diff >= 0 ? '+' : ''}${diff}枚　${medals.games}G`;
+  save({ ...medals, bet: replayBet ? 0 : bet });
+}
+
+function maxBet() {
+  if (!canOperate() || bet >= BET_MAX) return;
+  const need = BET_MAX - bet;
+  if (medals.credit + medals.hand < need) {
+    resultEl.textContent = 'メダルが足りません（貸出を押してください）';
+    return;
+  }
+  const fromCredit = Math.min(need, medals.credit);   // クレジットから優先して使う
+  medals.credit -= fromCredit;
+  medals.hand -= need - fromCredit;
+  bet = BET_MAX;
+  payShown = 0;
+  resultEl.textContent = '';
+  renderMedals();
+}
+
+function lend() {
+  if (!canOperate()) return;
+  medals.invest += LEND_UNIT;
+  addToCredit(LEND_UNIT);
+  renderMedals();
+}
+
+// 精算：クレジット（と、メダルで掛けたベット）を手持ちに戻す
+function settle() {
+  if (!canOperate()) return;
+  if (!replayBet) { medals.hand += bet; bet = 0; }
+  medals.hand += medals.credit;
+  medals.credit = 0;
+  renderMedals();
+}
+
+function updatePayout(dt) {
+  if (payQueue <= 0) return;
+  payTimer += dt;
+  while (payTimer >= PAYOUT_INTERVAL && payQueue > 0) {
+    payTimer -= PAYOUT_INTERVAL;
+    payQueue--;
+    payShown++;
+    addToCredit(1);
+  }
+  renderMedals();
+}
+
 // =================== 描画 ===================
 let dpr = 1, W = 0, H = 0, cellW = 0, cellH = 0, gap = 0;
 let symbolImages = {};
@@ -506,11 +646,19 @@ function updateDebug() {
 }
 
 function pullLever() {
-  if (reels.some(r => r.state !== 'stopped')) return;
+  if (!canOperate()) return;
+  if (bet < BET_MAX) {
+    resultEl.textContent = medals.credit + medals.hand >= BET_MAX
+      ? 'MAX BET を押してください' : 'メダルが足りません（貸出を押してください）';
+    return;
+  }
   gameInfo = logic.startGame();
+  medals.games++;
   wins = [];
+  payShown = 0;
   resultEl.textContent = '';
   for (const r of reels) { r.state = 'accel'; r.speed = 0; r.slip = 0; }
+  renderMedals();
   updateDebug();
 }
 
@@ -532,6 +680,13 @@ function onAllStopped() {
   } else {
     resultEl.textContent = wins.map(w => w.pay ? `${w.role.name} ${w.pay}枚` : w.role.name).join(' / ');
   }
+  // 払い出し（1枚ずつクレジットへ）
+  payQueue = Math.min(PAY_MAX, wins.reduce((s, w) => s + w.pay, 0));
+  payTimer = PAYOUT_INTERVAL;   // 1枚目はすぐ出す
+  // ベットは消費。リプレイなら次ゲームはメダルを使わずに自動で3枚掛け
+  replayBet = wins.some(w => w.role.flag === 'REPLAY');
+  bet = replayBet ? BET_MAX : 0;
+  renderMedals();
   updateDebug();
 }
 
@@ -559,6 +714,7 @@ function update(dt) {
     updateDebug();
     if (reels.every(r => r.state === 'stopped')) onAllStopped();
   }
+  updatePayout(dt);
 }
 
 let last = performance.now();
@@ -579,14 +735,18 @@ function bindPress(el, fn) {
   el.addEventListener('pointercancel', up);
 }
 bindPress(leverBtn, pullLever);
+bindPress(maxBetBtn, maxBet);
+bindPress(lendBtn, lend);
+bindPress(settleBtn, settle);
 stopBtns.forEach((b, i) => bindPress(b, () => pressStop(i)));
 showFlagEl.addEventListener('change', updateDebug);
 
-// PCでの確認用キーボード操作: Space=レバー, Z/X/C または ←↓→ = 停止
+// PCでの確認用キーボード操作: B/↑=MAX BET, Space=レバー, Z/X/C または ←↓→ = 停止
 window.addEventListener('keydown', e => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
-  if (k === ' ' || k === 'enter') { e.preventDefault(); pullLever(); }
+  if (k === 'b' || k === 'arrowup') { e.preventDefault(); maxBet(); }
+  else if (k === ' ' || k === 'enter') { e.preventDefault(); pullLever(); }
   else if (k === 'z' || k === 'arrowleft') pressStop(0);
   else if (k === 'x' || k === 'arrowdown') pressStop(1);
   else if (k === 'c' || k === 'arrowright') pressStop(2);
@@ -594,6 +754,9 @@ window.addEventListener('keydown', e => {
 
 window.addEventListener('resize', resize);
 resize();
+renderMedals();
+resultEl.textContent = medals.credit + medals.hand >= BET_MAX
+  ? 'MAX BET → レバーで開始' : '貸出ボタンでメダルを借りてください';
 requestAnimationFrame(frame);
 </script>
 </body>

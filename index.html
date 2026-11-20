@@ -816,6 +816,8 @@ function buildSymbols() {
 // ---- 絵柄画像の読み込み ----
 //  index.html と同じ場所の symbols フォルダに下の名前で画像を置くと、その画像を使う。
 //  無い絵柄は標準の絵のまま。png 以外の拡張子も順に探す。
+// 画像を差し替えたらこの番号を上げる（ブラウザに残った古い画像を使わせないため）
+const ASSET_VERSION = 2;
 const SYMBOL_FILES = {
   '7': 'red7', F: 'frog7', X: 'bar', R: 'replay', W: 'blue',
   B: 'bell', O: 'orange', C: 'cherry', P: 'flower',
@@ -838,7 +840,7 @@ function loadSymbolImage(sym, name, extIndex = 0) {
   const img = new Image();
   img.onload = () => { customImages[sym] = img; buildSymbols(); };
   img.onerror = () => loadSymbolImage(sym, name, extIndex + 1);
-  img.src = `symbols/${name}.${IMAGE_EXTS[extIndex]}`;
+  img.src = `symbols/${name}.${IMAGE_EXTS[extIndex]}?v=${ASSET_VERSION}`;
 }
 
 for (const [sym, name] of Object.entries(SYMBOL_FILES)) loadSymbolImage(sym, name);
@@ -848,7 +850,7 @@ for (const [sym, name] of Object.entries(SYMBOL_FILES)) loadSymbolImage(sym, nam
 //  画像の外周からつながっている「白〜明るい灰色」の部分を透明にしてから表示する。
 //  キャラは黒い輪郭で囲まれているので、白いお腹や目は消えない。
 //  本当に背景が透明な PNG に差し替えた場合は、この処理は何もしないのと同じになる。
-const CHARA_SRC = 'shachinosuke.webp';
+const CHARA_SRC = `shachinosuke.webp?v=${ASSET_VERSION}`;
 const charaEl = document.getElementById('chara');
 
 function removeFakeBackground(img) {

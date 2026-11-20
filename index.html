@@ -75,11 +75,23 @@
     50% { box-shadow: 0 8px 30px #000a, 0 0 0 0 #c040ff00; }
   }
 
+  /* チャンス中、レバーを叩く前に「何が成立すればボーナスか」を出す帯（スクロール表示の上に重ねる） */
+  #chanceGuide { position: absolute; left: 12px; right: 12px; top: -10px; height: 22px; z-index: 7; display: none;
+    align-items: center; justify-content: center; border-radius: 12px; background: #000; border: 2px solid;
+    font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; pointer-events: none;
+    animation: guidePulse 1s ease-in-out infinite; }
+  #chanceGuide.show { display: flex; }
+  #chanceGuide.red { color: #ff6b6b; border-color: #ff3b3b; }
+  #chanceGuide.blue { color: #7fb2ff; border-color: #3d86ff; }
+  #chanceGuide.purple { color: #e1a6ff; border-color: #c040ff; }
+  @keyframes guidePulse { 50% { filter: brightness(1.5); } }
+
   /* 小役の履歴（リール枠の下の縁。左が古く右が最新） */
-  #flagHistory { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); display: flex; gap: 6px;
-    padding: 3px 10px; background: #000d; border: 1px solid #c9a640; border-radius: 12px; z-index: 6; pointer-events: none; }
-  .fh-dot { width: 13px; height: 13px; border-radius: 50%; background: #2a2a2a; border: 1px solid #555; box-sizing: border-box; }
-  .fh-dot.latest { box-shadow: 0 0 0 2px #fff8; }
+  #flagHistory { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); display: flex; gap: 4px;
+    padding: 2px 6px; background: #000d; border: 1px solid #c9a640; border-radius: 6px; z-index: 6; pointer-events: none; }
+  /* 1つ1つは AUTO・CHANCE ボタンと同じ横長の角丸 */
+  .fh-dot { width: 15px; height: 9px; border-radius: 4px; background: #2a2a2a; border: 1px solid #555; box-sizing: border-box; }
+  .fh-dot.latest { box-shadow: 0 0 0 1.5px #fff9; }
 
   /* スランプグラフ */
   #graphModal { position: fixed; inset: 0; background: #000b; display: none; align-items: center; justify-content: center; z-index: 50; }
@@ -236,6 +248,7 @@
     </div>
     <div id="frame"><canvas id="reels"></canvas><div id="cutin"><img alt=""></div>
       <div id="ticker"><span id="tickerText"></span></div>
+      <div id="chanceGuide"></div>
       <div id="flagHistory" aria-label="小役の履歴（左が古く右が最新）"></div></div>
     <div id="leverBox">
       <button id="lever" aria-label="レバー"><span class="lv-base"></span><span class="lv-arm"><span class="lv-knob"></span></span></button>
@@ -349,8 +362,8 @@
   //  今の値で機械割 約105%（完璧な目押し）になるよう調整済み
   const CONFIG = {
     STREAK_TO_BONUS: 3,     // 同じ小役が何ゲーム連続で成立したら発動するか
-    CHERRY_TO_ORANGE: 0.74, // チェリー成立 → 次ゲームがオレンジになる確率
-    ORANGE_CHAIN: 0.69,     // オレンジ成立 → 次ゲームもオレンジになる確率
+    CHERRY_TO_ORANGE: 0.73, // チェリー成立 → 次ゲームがオレンジになる確率
+    ORANGE_CHAIN: 0.68,     // オレンジ成立 → 次ゲームもオレンジになる確率
     PREMIUM_LOOP: 0.8,      // プレミアム後、ボーナスが終わるたびに青7 BIG が続く確率
     // ボーナスゲーム：毎ゲームベルが成立して BONUS_PAY 枚。払い出しの合計が END を「超えたら」終了
     //  BIG_END 75 → 15枚×6ゲーム＝90枚（純増72枚）、REG_END 60 → 15枚×5ゲーム＝75枚（純増60枚）
@@ -537,9 +550,11 @@
       this.smallFlag = f;
 
       // しゃちのすけチャンスのゲーム：小役が成立したらプレミアム（REG＋青7 BIG ループ）
+      //  リプレイなら次のゲームもチャンス継続、ハズレなら終了
       if (this.chance) {
         this.chance = false;
         if (CHANCE_ROLES.includes(f) && this.setBonus('REG', 'PREMIUM')) this.loop = true;
+        else if (f === 'REPLAY') { this.chance = true; this.events.push('CHANCE_CONTINUE'); }
         else this.events.push('CHANCE_MISS');
       }
 
@@ -1396,6 +1411,8 @@ const EVENT_TEXT = {
   BELL3: 'ベル3連！ 青7 BIG 確定',
   ORANGE3: 'オレンジ3連！ 赤7 BIG 確定',
   CHANCE: 'しゃちのすけチャンス！',
+  CHANCE_CONTINUE: 'リプレイ！ しゃちのすけチャンス継続',
+  CHANCE_MISS: 'しゃちのすけチャンス終了',
   PREMIUM: 'プレミアム！！',
   LOOP: '青7 BIG 継続！',
   LOOP_END: 'ループ終了',
@@ -1508,6 +1525,7 @@ function pullLever() {
   const heldFlag = logic.bonusFlag;   // 抽選前に持っていたボーナス（このゲームで立つ分はゲーム終了時に知らせる）
   gameInfo = logic.startGame();
   speak(heldFlag, gameInfo);
+  showChanceGuide(null);   // レバーを叩いたらチャンスの説明は消して、いつものスクロール表示に戻す
   Sound.lever();
   if (gameInfo.cutin) showCutin(gameInfo.cutin);
   medals.games++;
@@ -1698,10 +1716,32 @@ function chanceGlow() {
   }
   return null;
 }
+// チャンス中、レバーを叩くまでリール枠の上に出す説明
+const CHANCE_GUIDE_TEXT = {
+  red: '赤7チャンス！ オレンジが成立すれば赤7 BIG',
+  blue: '青7チャンス！ ベルが成立すれば青7 BIG',
+  purple: 'しゃちのすけチャンス！ ベル・オレンジ・チェリーでプレミアムREG ／ リプレイなら継続',
+};
+const chanceGuideEl = document.getElementById('chanceGuide');
+function showChanceGuide(g) {
+  chanceGuideEl.className = g ? `show ${g}` : '';
+  chanceGuideEl.textContent = g ? CHANCE_GUIDE_TEXT[g] : '';
+  chanceGuideEl.style.fontSize = '';
+  if (!g) return;
+  // 帯に収まらないときは文字を小さくする
+  const range = document.createRange();
+  range.selectNodeContents(chanceGuideEl);
+  let size = parseFloat(getComputedStyle(chanceGuideEl).fontSize);
+  while (range.getBoundingClientRect().width > chanceGuideEl.clientWidth - 16 && size > 8) {
+    size -= 1;
+    chanceGuideEl.style.fontSize = `${size}px`;
+  }
+}
 function updateFrameGlow() {
   const g = chanceGlow();
   frameEl.classList.remove('glow-red', 'glow-blue', 'glow-purple');
   if (g) frameEl.classList.add(`glow-${g}`);
+  showChanceGuide(g);
 }
 
 // ---- 小役の履歴（リール枠の下に丸を並べる） ----
@@ -1882,7 +1922,7 @@ function tickerMessage() {
   return [
     `【ボーナスの条件】ベル${n}連 → 青7 BIG`,
     `オレンジ${n}連 → 赤7 BIG`,
-    `リプレイ${n}連 → しゃちのすけチャンス（次のゲームでベル・オレンジ・チェリーならプレミアムREG、その後は${pct(C.PREMIUM_LOOP)}で青7 BIG ループ）`,
+    `リプレイ${n}連 → しゃちのすけチャンス（ベル・オレンジ・チェリーならプレミアムREG、リプレイならチャンス継続、その後は${pct(C.PREMIUM_LOOP)}で青7 BIG ループ）`,
     `チェリー成立 → ${pct(C.CHERRY_TO_ORANGE)}で次のゲームはオレンジ`,
     `オレンジ成立 → ${pct(C.ORANGE_CHAIN)}で次のゲームもオレンジ`,
     `【小役の確率】リプレイ ${prob('REPLAY')}　ベル ${prob('BELL')}　オレンジ ${prob('ORANGE')}　チェリー ${prob('CHERRY')}`,

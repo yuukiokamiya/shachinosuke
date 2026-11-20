@@ -1334,10 +1334,12 @@ const Sound = (() => {
       noise({ dur: 0.09, vol: 0.6, freq: 400, filter: 'lowpass' });
       tone({ type: 'triangle', f0: 200, f1: 55, dur: 0.14, vol: 0.6 });
     },
-    // 停止ボタン：「カッ」
+    // 停止ボタン：「ドムッ」低い胴鳴り＋スネアの響き
     stop() {
-      tone({ type: 'square', f0: 1500, f1: 900, dur: 0.045, vol: 0.18 });
-      noise({ dur: 0.03, vol: 0.25, freq: 3500 });
+      tone({ type: 'sine', f0: 210, f1: 75, dur: 0.13, vol: 0.55 });          // ドム（低い胴の音）
+      tone({ type: 'triangle', f0: 330, f1: 180, dur: 0.07, vol: 0.18 });     // 打面の音
+      noise({ dur: 0.12, vol: 0.32, freq: 1700, filter: 'bandpass', q: 0.8 }); // スネアのザッ
+      noise({ dur: 0.025, vol: 0.2, freq: 5000, filter: 'highpass' });        // スティックが当たる瞬間
     },
     // カットイン：強さで3段階
     cutin(type) {

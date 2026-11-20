@@ -143,6 +143,7 @@
 
   const N = 21;        // 1リールのコマ数
   const MAX_SLIP = 4;  // 最大すべりコマ数
+  const PAY_LIMIT = 15;// 1ゲームの最大払い出し
 
   // ---- 図柄コード ----------------------------------------------------
   //  R=リプレイ  B=ベル  7=赤7  F=青7(しゃちのすけ / 画像 frog7.png)  O=オレンジ
@@ -191,24 +192,33 @@
   //  ボーナスは下の「ゲーム性」のルートからだけ発生させるので、直接抽選は入れていない。
   //  直接抽選も入れたいときは { flag: 'BIG_RED', n: 273 } のように足す。
   const FLAG_TABLE = [
-    { flag: 'REPLAY', n: 9362 }, // 約 1/7
-    { flag: 'BELL',   n: 8192 }, // 1/8
-    { flag: 'ORANGE', n: 2048 }, // 1/32
-    { flag: 'CHERRY', n: 1638 }, // 約 1/40
+    { flag: 'REPLAY', n: 10082 }, // 約 1/6.5
+    { flag: 'BELL',   n: 9362  }, // 約 1/7
+    { flag: 'ORANGE', n: 2341  }, // 約 1/28
+    { flag: 'CHERRY', n: 1638  }, // 約 1/40
   ];
 
   // ---- ボーナス持ち越し中の抽選テーブル（リプレイだけ） ----------------
   const HELD_TABLE = [
-    { flag: 'REPLAY', n: 9362 }, // 約 1/7（それ以外はハズレ＝ボーナスを狙えるゲーム）
+    { flag: 'REPLAY', n: 10082 }, // 約 1/6.5（それ以外はハズレ＝ボーナスを狙えるゲーム）
   ];
 
   // ---- ゲーム性 --------------------------------------------------------
   const BONUS_FLAGS = ['BIG_BLUE', 'BIG_RED', 'REG'];
-  const STREAK_TO_BONUS = 3;     // 同じ小役が何ゲーム連続で成立したら発動するか
-  const CHERRY_TO_ORANGE = 0.5;  // チェリー成立 → 次ゲームがオレンジになる確率
-  const ORANGE_CHAIN = 0.5;      // オレンジ成立 → 次ゲームもオレンジになる確率
   const CHANCE_ROLES = ['BELL', 'ORANGE', 'CHERRY'];  // チャンス中にプレミアムになる小役
-  const PREMIUM_LOOP = 0.8;      // プレミアム後、ボーナスが終わるたびに青7 BIG が続く確率
+  // 調整用の数値（ここを変えるとゲームバランスが変わる）
+  //  今の値で機械割 約102%（完璧な目押し）、ボーナス合算 約1/36 になるよう調整済み
+  const CONFIG = {
+    STREAK_TO_BONUS: 3,     // 同じ小役が何ゲーム連続で成立したら発動するか
+    CHERRY_TO_ORANGE: 0.75, // チェリー成立 → 次ゲームがオレンジになる確率
+    ORANGE_CHAIN: 0.7,      // オレンジ成立 → 次ゲームもオレンジになる確率
+    PREMIUM_LOOP: 0.8,      // プレミアム後、ボーナスが終わるたびに青7 BIG が続く確率
+    // ボーナスゲーム：毎ゲームベルが成立して BONUS_PAY 枚。払い出しの合計が END を「超えたら」終了
+    //  BIG_END 15 → 15枚×2ゲーム＝30枚（純増24枚）、REG_END 10 → 15枚×1ゲーム（純増12枚）
+    BONUS_PAY: 15,
+    BIG_END: 15,
+    REG_END: 10,
+  };
 
   const FLAG_NAMES = {
     BIG_BLUE: '青7 BIG', BIG_RED: '赤7 BIG', REG: 'REG', REPLAY: 'リプレイ', BELL: 'ベル',
@@ -327,8 +337,12 @@
       this.forceOrange = false; // 次ゲームはオレンジ確定
       this.chance = false;      // 次ゲームがしゃちのすけチャンス
       this.loop = false;        // プレミアムの青7 BIG ループ中
+      this.bonusGame = null;    // ボーナスゲーム中 { type, paid }（null なら通常）
+      this.inBonusNow = false;  // このゲームがボーナスゲームか
       this.events = [];         // このゲームで起きた出来事（画面表示用）
     }
+
+    bonusEnd(type) { return type === 'REG' ? CONFIG.REG_END : CONFIG.BIG_END; }
 
     // ボーナスフラグを立てる（すでに持っているときは何もしない）
     setBonus(flag, event) {
@@ -341,6 +355,13 @@
     // レバーON：抽選する
     startGame(rand = Math.random) {
       this.events = [];
+      this.stops = [null, null, null];
+      // ボーナスゲーム中：毎ゲームベル成立（払い出しは BONUS_PAY 枚）。通常の抽選・連続カウントはしない
+      this.inBonusNow = !!this.bonusGame;
+      if (this.inBonusNow) {
+        this.smallFlag = 'BELL';
+        return { smallFlag: this.smallFlag, bonusFlag: this.bonusFlag, events: this.events };
+      }
       let f;
       if (this.bonusFlag) {
         // ボーナス持ち越し中はリプレイだけを抽選（次オレンジの予約も消える）
@@ -366,7 +387,7 @@
       // 連続成立を数える
       if (f && f === this.streakFlag) this.streakCount++;
       else { this.streakFlag = f; this.streakCount = f ? 1 : 0; }
-      if (this.streakCount >= STREAK_TO_BONUS) {
+      if (this.streakCount >= CONFIG.STREAK_TO_BONUS) {
         let fired = false;
         if (f === 'BELL') fired = this.setBonus('BIG_BLUE', 'BELL3');
         else if (f === 'ORANGE') fired = this.setBonus('BIG_RED', 'ORANGE3');
@@ -375,10 +396,9 @@
       }
 
       // チェリー・オレンジ → 次ゲームのオレンジ
-      if (f === 'CHERRY' && rand() < CHERRY_TO_ORANGE) this.forceOrange = true;
-      if (f === 'ORANGE' && rand() < ORANGE_CHAIN) this.forceOrange = true;
+      if (f === 'CHERRY' && rand() < CONFIG.CHERRY_TO_ORANGE) this.forceOrange = true;
+      if (f === 'ORANGE' && rand() < CONFIG.ORANGE_CHAIN) this.forceOrange = true;
 
-      this.stops = [null, null, null];
       return { smallFlag: this.smallFlag, bonusFlag: this.bonusFlag, events: this.events };
     }
 
@@ -417,26 +437,42 @@
       const wins = [];
       for (const role of ROLES) {
         const lines = alignedLines(role, this.stops);
-        if (lines.length) wins.push({ role, lines, pay: role.pay * lines.length });
+        if (!lines.length) continue;
+        // ボーナスゲーム中の小役は BONUS_PAY 枚
+        const unit = this.inBonusNow && role.pay > 0 ? CONFIG.BONUS_PAY : role.pay;
+        wins.push({ role, lines, pay: unit * lines.length });
       }
-      if (this.bonusFlag && wins.some(w => w.role.flag === this.bonusFlag)) {
-        this.bonusFlag = null;
-        // プレミアムのループ中なら、PREMIUM_LOOP の確率で次の青7 BIG
-        if (this.loop) {
-          if (rand() < PREMIUM_LOOP) { this.bonusFlag = 'BIG_BLUE'; this.events.push('LOOP'); }
-          else { this.loop = false; this.events.push('LOOP_END'); }
+      const total = Math.min(PAY_LIMIT, wins.reduce((s, w) => s + w.pay, 0));
+
+      if (this.inBonusNow) {
+        // ボーナスゲーム：払い出しの合計が終了枚数を超えたら終わり
+        this.bonusGame.paid += total;
+        if (this.bonusGame.paid > this.bonusEnd(this.bonusGame.type)) {
+          this.events.push('BONUS_END');
+          this.lastBonus = { ...this.bonusGame };
+          this.bonusGame = null;
+          // プレミアムのループ中なら、PREMIUM_LOOP の確率で次の青7 BIG
+          if (this.loop) {
+            if (rand() < CONFIG.PREMIUM_LOOP) { this.bonusFlag = 'BIG_BLUE'; this.events.push('LOOP'); }
+            else { this.loop = false; this.events.push('LOOP_END'); }
+          }
         }
+      } else if (this.bonusFlag && wins.some(w => w.role.flag === this.bonusFlag)) {
+        // ボーナスがそろった → 次ゲームからボーナスゲーム
+        this.bonusGame = { type: this.bonusFlag, paid: 0 };
+        this.bonusFlag = null;
+        this.events.push('BONUS_START');
       }
       return wins;
     }
 
-    // ボーナスを持っている間はメダルを使わない
+    // ボーナスを持っている間（ボーナスゲーム前）はメダルを使わない
     isFreeGame() { return this.bonusFlag !== null; }
   }
 
   const api = {
-    N, MAX_SLIP, STRIPS, LINES, ROLES, FLAG_TABLE, FLAG_NAMES, SYMBOL_NAMES, BONUS_FLAGS,
-    mod, symAt, lottery, SlotLogic,
+    N, MAX_SLIP, STRIPS, LINES, ROLES, FLAG_TABLE, HELD_TABLE, FLAG_NAMES, SYMBOL_NAMES, BONUS_FLAGS,
+    CONFIG, PAY_LIMIT, mod, symAt, lottery, SlotLogic,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SlotLogicLib = api;
@@ -486,7 +522,7 @@ const medals = Object.assign({ credit: 0, hand: 0, invest: 0, games: 0 }, loadSa
 const savedBet = medals.bet || 0;
 const savedFree = !!medals.free;
 // ボーナス持ち越し・連続回数などのゲーム性の状態も復元する
-const LOGIC_KEYS = ['bonusFlag', 'streakFlag', 'streakCount', 'forceOrange', 'chance', 'loop'];
+const LOGIC_KEYS = ['bonusFlag', 'streakFlag', 'streakCount', 'forceOrange', 'chance', 'loop', 'bonusGame'];
 if (medals.logic) for (const k of LOGIC_KEYS) if (k in medals.logic) logic[k] = medals.logic[k];
 delete medals.bet; delete medals.free; delete medals.logic;
 if (savedBet) addToCredit(savedBet);
@@ -950,7 +986,12 @@ const EVENT_TEXT = {
   LOOP_END: 'ループ終了',
 };
 function eventMessages() {
-  return logic.events.filter(e => EVENT_TEXT[e]).map(e => EVENT_TEXT[e]);
+  const msgs = logic.events.filter(e => EVENT_TEXT[e]).map(e => EVENT_TEXT[e]);
+  // ボーナスゲームの開始・途中経過・終了
+  if (logic.events.includes('BONUS_START')) msgs.push(`${FLAG_NAMES[logic.bonusGame.type]} スタート！`);
+  else if (logic.bonusGame) msgs.push(`${FLAG_NAMES[logic.bonusGame.type]} 中 ${logic.bonusGame.paid}枚`);
+  if (logic.events.includes('BONUS_END')) msgs.unshift(`${FLAG_NAMES[logic.lastBonus.type]} 終了 ${logic.lastBonus.paid}枚`);
+  return msgs;
 }
 
 // ---- 吹き出しのセリフ（毎ゲーム、前回と違うものを選ぶ） ----

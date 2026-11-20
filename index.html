@@ -31,12 +31,15 @@
   .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   #displays { display: flex; align-items: center; gap: clamp(10px, 2.5vw, 28px); }
   .disp { display: flex; flex-direction: column; align-items: center; font-size: 0.6em; color: #aaa; }
-  .seg { font-family: "Courier New", monospace; font-weight: bold; font-size: 2.2em; line-height: 1;
-    color: #ff3b2f; background: #1a0000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; text-shadow: 0 0 8px #f00a; }
-  .seg { display: flex; gap: 1px; }
-  .digit { display: inline-block; height: 1em; overflow: hidden; }
+  /* 7セグメント表示器 */
+  .seg { display: flex; gap: 0.08em; font-size: 2.8em; line-height: 1; padding: 0.12em 0.2em; border-radius: 4px;
+    background: linear-gradient(#140000, #2a0503); box-shadow: inset 0 0 0 2px #000, inset 0 2px 6px #000; }
+  .digit { display: inline-block; width: 0.62em; height: 1em; overflow: hidden; }
   .strip { display: flex; flex-direction: column; transition: transform 0.07s ease-out; }
-  .strip span { height: 1em; line-height: 1em; text-align: center; }
+  .strip span { display: block; height: 1em; }
+  .strip svg { display: block; width: 0.62em; height: 1em; overflow: visible; }
+  .strip .on { fill: #ff2a14; filter: drop-shadow(0 0 2px #ff3b1f) drop-shadow(0 0 5px #ff1a00aa); }
+  .strip .off { fill: #3d0a06; }
   #betLamps { display: flex; gap: 6px; padding: 6px 0; }
   .lamp { width: 1.3em; height: 1.3em; border-radius: 50%; background: #332; border: 2px solid #554; font-size: 1.2em; }
   .lamp.on { background: radial-gradient(circle at 40% 35%, #fff6a0, #ffb300); border-color: #ffd54f; box-shadow: 0 0 10px #ffb300; }
@@ -383,6 +386,34 @@ let payQueue = 0;       // これから払い出す枚数
 let payShown = 0;       // 今回払い出した枚数（PAY表示）
 let payTimer = 0;
 
+// ---- 7セグメントの数字（SVG） ----
+//  a〜g の7本の線のうち、点灯する線を明るく、消えている線を暗く描く。
+//    aaa
+//   f   b
+//    ggg
+//   e   c
+//    ddd
+const SEG_T = 10;   // 線の太さ
+function hSeg(x1, x2, cy) {
+  const h = SEG_T / 2;
+  return `${x1},${cy} ${x1 + h},${cy - h} ${x2 - h},${cy - h} ${x2},${cy} ${x2 - h},${cy + h} ${x1 + h},${cy + h}`;
+}
+function vSeg(cx, y1, y2) {
+  const h = SEG_T / 2;
+  return `${cx},${y1} ${cx + h},${y1 + h} ${cx + h},${y2 - h} ${cx},${y2} ${cx - h},${y2 - h} ${cx - h},${y1 + h}`;
+}
+const SEG_SHAPES = {
+  a: hSeg(9, 51, 6),   g: hSeg(9, 51, 50),  d: hSeg(9, 51, 94),
+  f: vSeg(6, 9, 47),   b: vSeg(54, 9, 47),
+  e: vSeg(6, 53, 91),  c: vSeg(54, 53, 91),
+};
+const SEG_DIGITS = ['abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc', 'abcdefg', 'abcdfg'];
+const SEG_SVGS = SEG_DIGITS.map(on =>
+  `<svg viewBox="0 0 60 100"><g transform="translate(6 0) skewX(-6)">` +
+  Object.entries(SEG_SHAPES).map(([k, pts]) =>
+    `<polygon class="${on.includes(k) ? 'on' : 'off'}" points="${pts}"/>`).join('') +
+  `</g></svg>`);
+
 // ---- 数字が縦に回るカウンター表示 ----
 //  set(値) で目標値を決めると、1ずつ数字を回しながら近づく。
 //  増えるときは数字が上へ、減るときは下へ流れる。
@@ -399,7 +430,7 @@ class RollCounter {
       // 0〜9 の下にもう一つ 0 を置き、9→0 / 0→9 を途切れずに回せるようにする
       for (let n = 0; n <= 10; n++) {
         const s = document.createElement('span');
-        s.textContent = n % 10;
+        s.innerHTML = SEG_SVGS[n % 10];
         strip.appendChild(s);
       }
       strip.addEventListener('transitionend', () => {

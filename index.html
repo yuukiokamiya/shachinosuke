@@ -232,7 +232,14 @@
     #machine { flex-direction: row; align-items: center; gap: 1.5vw;
       padding: 4px var(--padX) var(--padB) var(--padX); }
     #stage { row-gap: 8px; }
-    #paytable { display: none; }
+    /* 配当表：1段を「図柄3つ＋枚数」の横1行にする（名前は省く）。その分しゃちのすけを少し小さく */
+    :root { --CHARA: 0.38; }
+    #paytable { gap: 2px; font-size: max(9px, calc(var(--H) * 0.05)); }
+    .pt-row { flex-direction: row; justify-content: center; gap: 4px; padding: 1px 0; }
+    .pt-name { display: none; }
+    .pt-icons { gap: 1px; }
+    .pt-icons canvas { width: calc(var(--H) * 0.078); height: calc(var(--H) * 0.058); border-radius: 2px; }
+    #bubble { margin-bottom: 12px; }
     #panel { order: 2; width: clamp(170px, 26vw, 220px); flex-shrink: 0; max-height: calc(100% - 4px); overflow-y: auto;
       font-size: 13px; padding: 8px; gap: 6px; }
     #panel .row { flex-wrap: wrap; justify-content: center; gap: 6px; }
@@ -276,15 +283,15 @@
       <div id="paytable">
         <div class="pt-row" data-flag="BIG_BLUE">
           <div class="pt-icons"><canvas data-sym="F"></canvas><canvas data-sym="F"></canvas><canvas data-sym="F"></canvas></div>
-          <div class="pt-text">青7 BIG <span data-pay="BIG"></span></div>
+          <div class="pt-text"><span class="pt-name">青7 BIG </span><span data-pay="BIG"></span></div>
         </div>
         <div class="pt-row" data-flag="BIG_RED">
           <div class="pt-icons"><canvas data-sym="7"></canvas><canvas data-sym="7"></canvas><canvas data-sym="7"></canvas></div>
-          <div class="pt-text">赤7 BIG <span data-pay="BIG"></span></div>
+          <div class="pt-text"><span class="pt-name">赤7 BIG </span><span data-pay="BIG"></span></div>
         </div>
         <div class="pt-row" data-flag="REG">
           <div class="pt-icons"><canvas data-sym="X"></canvas><canvas data-sym="X"></canvas><canvas data-sym="X"></canvas></div>
-          <div class="pt-text">REG <span data-pay="REG"></span></div>
+          <div class="pt-text"><span class="pt-name">REG </span><span data-pay="REG"></span></div>
         </div>
       </div>
       <div id="bubble">しょうちのすけ</div>

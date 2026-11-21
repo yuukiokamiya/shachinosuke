@@ -1612,11 +1612,13 @@ function update(dt) {
 
 let last = performance.now();
 function frame(t) {
+  requestAnimationFrame(frame);   // 先に次の予約をしておく（途中でエラーが出ても止まらないように）
   const dt = Math.min(0.05, (t - last) / 1000);
   last = t;
   update(dt);
-  draw(t);
-  requestAnimationFrame(frame);
+  // 画面の大きさが0のとき（裏に回して開いたときなど）は描かない。大きさが戻ったら resize で作り直す
+  if (cellW > 0 && cellH > 0) draw(t);
+  else if (canvas.getBoundingClientRect().width > 0) resize();
 }
 
 // =================== 入力 ===================

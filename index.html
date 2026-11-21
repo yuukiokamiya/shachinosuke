@@ -1465,7 +1465,9 @@ const SPEECH = {
   MINUS: ['あかんす', 'こんなもんすね', '海・・'],
   PLUS: ['いい感じっす', '今日は飲みっす', '肉食べるっす', 'やるっち！'],
   // HUSKYLENS 2 がつながっているときの表情のセリフ（②の熱いセリフがないゲームで使う）
+  //  HUSKY_RATE の確率で表情のセリフ、残りは③④の今までのセリフ
   //  role = そのゲームで小役（ベル・オレンジ・チェリー・リプレイ）が成立しているとき
+  HUSKY_RATE: 0.5,
   HUSKY: {
     happy: { none: ['ご機嫌ね～', 'いいことあった？'], role: ['キタ！？', 'なんか来てる？'] },
     down: { none: ['しょ、しょんぼり', '元気出そう'], role: ['ここからっす！', 'いくっす！'] },
@@ -1525,7 +1527,7 @@ function speak(heldFlag, info) {
   if (heldFlag) text = BONUS_SPEECH[heldFlag];                        // ①
   else if (logic.hot) text = pickHotLine(logic.hot);                 // ②
   const mood = huskyMood();
-  if (!text && mood) {                                               // HuskyLens がつながっていれば表情のセリフ
+  if (!text && mood && Math.random() < SPEECH.HUSKY_RATE) {          // HuskyLens がつながっていれば、ときどき表情のセリフ
     const role = !logic.inBonusNow && ['BELL', 'ORANGE', 'CHERRY', 'REPLAY'].includes(info.smallFlag);
     text = pickLine(SPEECH.HUSKY[mood][role ? 'role' : 'none']);
   }

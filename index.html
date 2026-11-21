@@ -145,7 +145,9 @@
   #lever.pressed .lv-arm { height: 26%; }
 
   /* オートプレイボタン（レバーの横に小さく） */
-  #leverBox { gap: 10px; }
+  /* レバーと AUTO・CHANCE の下地（背景のイラストと重なっても見やすいように） */
+  #leverBox { gap: 10px; justify-self: center; padding: 0 12px; border-radius: 16px;
+    background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(201, 166, 64, 0.6); box-shadow: 0 4px 12px #0008; }
   #autoBtns { display: flex; flex-direction: column; gap: 6px; }
   #chanceBtn { width: clamp(40px, 6vh, 52px); height: clamp(28px, 4vh, 34px); border-radius: 14px; border: 2px solid #777;
     background: #333; color: #aaa; font-weight: bold; font-size: clamp(8px, 1.2vh, 10px); padding: 0; }
@@ -235,11 +237,10 @@
     #machine { flex-direction: row; align-items: center; gap: 1.5vw;
       padding: 4px var(--padX) var(--padB) var(--padX); }
     #stage { row-gap: 8px; }
-    /* 配当表：1段を「図柄3つ＋枚数」の横1行にする（名前は省く）。その分しゃちのすけを少し小さく */
+    /* 配当表：iPad と同じ「図柄3つ、その下に名前と枚数」。そのぶんしゃちのすけを少し小さく */
     :root { --CHARA: 0.38; }
-    #paytable { gap: 2px; font-size: max(9px, calc(var(--H) * 0.05)); }
-    .pt-row { flex-direction: row; justify-content: center; gap: 4px; padding: 1px 0; }
-    .pt-name { display: none; }
+    #paytable { gap: 2px; font-size: max(9px, calc(var(--H) * 0.045)); }
+    .pt-row { padding: 1px 0; gap: 0; }
     .pt-icons { gap: 1px; }
     .pt-icons canvas { width: calc(var(--H) * 0.078); height: calc(var(--H) * 0.058); border-radius: 2px; }
     #bubble { margin-bottom: 12px; }

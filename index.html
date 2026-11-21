@@ -10,6 +10,8 @@
   html, body { margin: 0; height: 100%; background: #1b1b2b; color: #fff;
     font-family: -apple-system, "Hiragino Sans", "Segoe UI", sans-serif; overflow: hidden; touch-action: manipulation;
     overscroll-behavior: none; }
+  /* 背景：海の中のイラストを画面いっぱいに（中央を基準に切り取る）。読み込めないときは紺色 */
+  body { background: #0b2f4f url("background.webp?v=1") center / cover no-repeat; }
   #machine { touch-action: none; }      /* ゲームの画面では拡大・スクロールをしない。タッチはすべてボタンへ */
   #panel { touch-action: pan-y; }       /* パネルの中だけは縦スクロールできるようにする */
   /* ---- 横向きレイアウト ----

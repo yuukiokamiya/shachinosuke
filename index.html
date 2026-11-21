@@ -205,6 +205,33 @@
   #bleBtn.connecting { background: #1565c0; animation: autoBlink 0.8s infinite; }
   #bleBtn.connected { background: #1565c0; box-shadow: 0 0 10px #42a5f5; }
   #settleBtn { background: #6d4c41; }
+
+  /* ---- 高さの低い横向き画面（iPhone の横向きなど）----
+     パネルを右側に縦長で置き、リールに高さを回す。配当表は隠す。
+     カメラの切り欠きに重ならないよう、左右に safe-area の余白を取る */
+  @media (orientation: landscape) and (max-height: 520px) {
+    :root {
+      --H: min(calc(100vh - 112px), calc((96.5vw - 265px - env(safe-area-inset-left) - env(safe-area-inset-right)) / 1.82));
+    }
+    @supports (height: 100dvh) {
+      :root { --H: min(calc(100dvh - 112px), calc((96.5vw - 265px - env(safe-area-inset-left) - env(safe-area-inset-right)) / 1.82)); }
+    }
+    #machine { flex-direction: row; align-items: center; gap: 1.5vw;
+      padding: 6px max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left)); }
+    #stage { row-gap: 8px; }
+    #paytable { display: none; }
+    #panel { order: 2; width: 220px; flex-shrink: 0; max-height: calc(100% - 4px); overflow-y: auto;
+      font-size: 13px; padding: 8px; gap: 6px; }
+    #panel .row { flex-wrap: wrap; justify-content: center; gap: 6px; }
+    #displays { gap: 8px; flex-wrap: wrap; justify-content: center; }
+    #result { flex-basis: 100%; text-align: center; }
+    #stats { text-align: center; }
+    .small { padding: 5px 9px; }
+    #lever { width: 54px; height: 54px; }
+    #autoBtns { gap: 4px; }
+    #autoBtn, #chanceBtn { width: 42px; height: 24px; font-size: 8px; }
+    #autoStatus { font-size: 10px; }
+  }
 </style>
 </head>
 <body>

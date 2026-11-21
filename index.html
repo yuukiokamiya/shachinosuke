@@ -17,15 +17,16 @@
   #panel { touch-action: pan-y; }       /* パネルの中だけは縦スクロールできるようにする */
   /* ---- 横向きレイアウト ----
      --H = リール窓の高さ。画面の高さと幅の両方に収まる大きさにする。
-     左の列（キャラ・レバー）は高さの0.45倍、リールは高さの1.37倍 */
+     左の列（キャラ・レバー）は高さの0.45倍、リールは高さの1.37倍。
+     302px はパネル・レバーと停止ボタン・オートの説明の段のぶん */
   :root {
-    --H: min(calc(100vh - 270px), calc((94vw - 30px) / 1.82));
+    --H: min(calc(100vh - 302px), calc((94vw - 30px) / 1.82));
     --S: calc(var(--H) * 0.45);                   /* 左の列の幅 */
     --W: calc(var(--H) * 1.82 + 24px + 2vw);      /* 全体の横幅 */
     --CHARA: 0.46;                                /* キャラの高さ（リール高さに対する割合） */
   }
   @supports (height: 100dvh) {
-    :root { --H: min(calc(100dvh - 270px), calc((94vw - 30px) / 1.82)); }
+    :root { --H: min(calc(100dvh - 302px), calc((94vw - 30px) / 1.82)); }
   }
   #machine { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5vh; padding: 1.5vh; }
   #stage { display: grid; grid-template-columns: var(--S) auto; column-gap: 2vw; row-gap: 1.5vh; width: var(--W); }
@@ -133,7 +134,8 @@
   @keyframes pop { 0% { transform: scale(0.5); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
   /* レバー（押すと棒が手前に倒れて短く見える） */
-  #lever { position: relative; width: clamp(70px, 12vh, 110px); height: clamp(70px, 12vh, 110px);
+  /* 大きさはリールの高さに合わせる（iPhone 縦向きで大きくなりすぎないように） */
+  #lever { position: relative; --LV: clamp(50px, min(12vh, calc(var(--H) * 0.28)), 110px); width: var(--LV); height: var(--LV);
     background: none; border: none; padding: 0; }
   .lv-base { position: absolute; left: 50%; bottom: 6%; width: 50%; height: 24%; transform: translateX(-50%);
     border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #777, #1a1a1a 70%); box-shadow: 0 3px 6px #000a; }
@@ -145,9 +147,7 @@
   #lever.pressed .lv-arm { height: 26%; }
 
   /* オートプレイボタン（レバーの横に小さく） */
-  /* レバーと AUTO・CHANCE の下地（背景のイラストと重なっても見やすいように） */
-  #leverBox { gap: 10px; justify-self: center; padding: 0 12px; border-radius: 16px;
-    background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(201, 166, 64, 0.6); box-shadow: 0 4px 12px #0008; }
+  #leverBox { gap: 10px; justify-self: center; position: relative; }
   #autoBtns { display: flex; flex-direction: column; gap: 6px; }
   #chanceBtn { width: clamp(40px, 6vh, 52px); height: clamp(28px, 4vh, 34px); border-radius: 14px; border: 2px solid #777;
     background: #333; color: #aaa; font-weight: bold; font-size: clamp(8px, 1.2vh, 10px); padding: 0; }
@@ -165,12 +165,25 @@
   /* 停止ボタン（各リールの真下に配置） */
   #stops { grid-column: 2; grid-row: 2; display: grid; grid-template-columns: repeat(3, 1fr);
     column-gap: calc(var(--H) * 1.37 * 0.02); padding: 0 calc(12px + var(--H) * 1.37 * 0.02);
-    justify-items: center; align-items: start; position: relative; }
-  /* オート中の説明（停止ボタンのすぐ下。段の下の空きに重ねて置くのでレイアウトは変わらない） */
-  #autoStatus { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; white-space: nowrap;
-    font-size: clamp(11px, 1.7vh, 14px); font-weight: bold; pointer-events: none; }
+    justify-items: center; align-items: start; position: relative;
+    padding-top: 12px; /* リール枠の下にはみ出している図柄履歴にかからないように少し下げる */ }
+  /* オート中の説明（レバーと停止ボタンの段のすぐ下に1行ぶんの場所をとっておく） */
+  #autoStatus { grid-column: 1 / -1; grid-row: 3; position: relative; z-index: 1; margin-top: -0.6vh;
+    min-height: 1.4em; line-height: 1.4; text-align: center; contain: inline-size; /* 長い説明で枠が広がらないように */
+    font-size: clamp(11px, 1.7vh, 14px); font-weight: bold; pointer-events: none; text-shadow: 0 1px 2px #000; }
   #autoStatus.hot { color: #69f0ae; }
-  #autoStatus.chance { color: #e1bee7; }
+  #autoStatus.chance { color: #f3c4ff; }
+  /* レバー・停止ボタン・オートの説明をまとめて載せる暗い下地（背景のイラストと重なっても見やすいように） */
+  #ctrlBack { grid-column: 1 / -1; grid-row: 2 / 4; z-index: 0; margin: -6px -8px -4px; border-radius: 16px;
+    background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(201, 166, 64, 0.6); box-shadow: 0 4px 12px #0008;
+    pointer-events: none; }
+  #leverBox, #stops { z-index: 1; }
+  /* iPhone 縦向き：左の列が細いので、左端にそろえて停止ボタンにかからないように。
+     オートの説明は2行ぶんの場所をとって折り返す */
+  @media (orientation: portrait) and (max-width: 600px) {
+    #leverBox { justify-self: start; gap: 8px; }
+    #autoStatus { min-height: 2.8em; font-size: 11px; padding: 0 4px; }
+  }
   .stop { position: relative; width: calc(var(--H) * 0.2); aspect-ratio: 1.45; border: none; border-radius: 12px; padding: 0;
     background: linear-gradient(#e3e6ea, #8a9097 60%, #5d6268); box-shadow: 0 5px 0 #33363a, 0 8px 14px #0009; }
   .stop::before { content: ''; position: absolute; inset: 15%; border-radius: 8px;
@@ -229,10 +242,10 @@
     :root {
       --padX: max(22px, env(safe-area-inset-left), env(safe-area-inset-right));
       --padB: max(14px, env(safe-area-inset-bottom));
-      --H: min(calc(100vh - 112px - var(--padB)), calc((96.5vw - 265px - 2 * var(--padX)) / 1.82));
+      --H: min(calc(100vh - 126px - var(--padB)), calc((96.5vw - 265px - 2 * var(--padX)) / 1.82));
     }
     @supports (height: 100dvh) {
-      :root { --H: min(calc(100dvh - 112px - var(--padB)), calc((96.5vw - 265px - 2 * var(--padX)) / 1.82)); }
+      :root { --H: min(calc(100dvh - 126px - var(--padB)), calc((96.5vw - 265px - 2 * var(--padX)) / 1.82)); }
     }
     #machine { flex-direction: row; align-items: center; gap: 1.5vw;
       padding: 4px var(--padX) var(--padB) var(--padX); }
@@ -316,8 +329,9 @@
       <button class="stop" data-reel="0" aria-label="左停止"></button>
       <button class="stop" data-reel="1" aria-label="中停止"></button>
       <button class="stop" data-reel="2" aria-label="右停止"></button>
-      <div id="autoStatus"></div>
     </div>
+    <div id="autoStatus"></div>
+    <div id="ctrlBack"></div>
   </div>
 </div>
 

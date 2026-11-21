@@ -918,6 +918,7 @@ function updatePayout(dt) {
     payQueue--;
     payShown++;
     addToCredit(1);
+    Sound.coin();   // 1枚ごとに「チャリン」
   }
   renderMedals();
 }
@@ -1342,6 +1343,13 @@ const Sound = (() => {
       noise({ dur: 0.09, vol: 0.6, freq: 400, filter: 'lowpass' });
       tone({ type: 'triangle', f0: 200, f1: 55, dur: 0.14, vol: 0.6 });
     },
+    // 払い出し1枚：「チャリン」（毎回少しだけ高さを変えて、同じ音の繰り返しに聞こえないように）
+    coin() {
+      const f = 2300 * (0.94 + Math.random() * 0.12);
+      tone({ type: 'sine', f0: f, dur: 0.14, vol: 0.13, attack: 0.002 });           // 澄んだ「リン」
+      tone({ type: 'sine', f0: f * 1.52, dur: 0.09, vol: 0.07, attack: 0.002 });    // 金属らしい上の響き
+      noise({ dur: 0.02, vol: 0.06, freq: 7000, filter: 'highpass' });              // 当たった瞬間の「チャ」
+    },
     // 停止ボタン：「ドムッ」低い胴鳴り＋スネアの響き
     stop() {
       tone({ type: 'sine', f0: 210, f1: 75, dur: 0.13, vol: 0.55 });          // ドム（低い胴の音）
@@ -1531,8 +1539,11 @@ function speakAfterGame() {
 
 function pullLever() {
   if (!canOperate()) return;
+  // メダルが足りなければ自動で貸出（オート中は autoLoop が先に「メダル不足」で止める）
+  let autoLent = false;
+  if (bet < BET_MAX && medals.credit + medals.hand < BET_MAX - bet) { lend(); autoLent = true; }
   if (bet < BET_MAX) maxBet();        // レバーを叩くと自動で3枚掛け
-  if (bet < BET_MAX) return;          // メダル不足（maxBet がメッセージを出す）
+  if (bet < BET_MAX) return;
   const heldFlag = logic.bonusFlag;   // 抽選前に持っていたボーナス（このゲームで立つ分はゲーム終了時に知らせる）
   gameInfo = logic.startGame();
   speak(heldFlag, gameInfo);
@@ -1542,7 +1553,7 @@ function pullLever() {
   medals.games++;
   wins = [];
   payShown = 0;
-  resultEl.textContent = '';
+  resultEl.textContent = autoLent ? `メダルを自動で${LEND_UNIT}枚貸出しました` : '';
   for (const r of reels) { r.state = 'accel'; r.speed = 0; r.slip = 0; }
   renderMedals();
 }
@@ -1995,7 +2006,7 @@ function pressStopFromBle(i) {
 }
 
 // A ボタン：リールが止まっていればレバー、回っていれば左の停止。
-//  払い出しの途中なら、払い出しが終わったところでレバーを入れる。入らないときは理由を出す
+//  払い出しの途中なら、払い出しが終わったところでレバーを入れる
 let bleLeverPending = false;
 function bleLeverOrLeftStop() {
   if (reels.some(r => r.state !== 'stopped')) { pressStopFromBle(0); return; }
@@ -2003,31 +2014,17 @@ function bleLeverOrLeftStop() {
     if (!bleLeverPending) {
       bleLeverPending = true;
       const wait = setInterval(() => {
-        if (canOperate()) { clearInterval(wait); bleLeverPending = false; bleLever(); }
+        if (canOperate()) { clearInterval(wait); bleLeverPending = false; pullLever(); }
       }, 50);
     }
     return;
   }
-  bleLever();
-}
-function bleLever() {
-  const g = medals.games;
   pullLever();
-  if (medals.games === g && !resultEl.textContent) resultEl.textContent = 'レバーが入りませんでした';
-}
-
-// 受け取った文字を BLE ボタンに一瞬出す（届いているかの確認用）
-let bleFlashTimer = null;
-function flashBleReceived(value) {
-  bleBtn.textContent = `BLE ${value}`;
-  clearTimeout(bleFlashTimer);
-  bleFlashTimer = setTimeout(() => { if (bleBtn.classList.contains('connected')) bleBtn.textContent = 'BLE●'; }, 400);
 }
 
 function handleMicrobitLine(line) {
   const [kind, value] = line.trim().split(',');
   if (kind === 'BTN' && BLE_BUTTON_ACTION[value]) {
-    flashBleReceived(value);
     Sound.unlock();
     BLE_BUTTON_ACTION[value]();
   }

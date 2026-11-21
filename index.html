@@ -2,13 +2,16 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>パチスロ</title>
 <style>
   * { box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: #1b1b2b; color: #fff;
-    font-family: -apple-system, "Hiragino Sans", "Segoe UI", sans-serif; overflow: hidden; touch-action: manipulation; }
+    font-family: -apple-system, "Hiragino Sans", "Segoe UI", sans-serif; overflow: hidden; touch-action: manipulation;
+    overscroll-behavior: none; }
+  #machine { touch-action: none; }      /* ゲームの画面では拡大・スクロールをしない。タッチはすべてボタンへ */
+  #panel { touch-action: pan-y; }       /* パネルの中だけは縦スクロールできるようにする */
   /* ---- 横向きレイアウト ----
      --H = リール窓の高さ。画面の高さと幅の両方に収まる大きさにする。
      左の列（キャラ・レバー）は高さの0.45倍、リールは高さの1.37倍 */
@@ -230,7 +233,7 @@
       padding: 4px var(--padX) var(--padB) var(--padX); }
     #stage { row-gap: 8px; }
     #paytable { display: none; }
-    #panel { order: 2; width: 220px; flex-shrink: 0; max-height: calc(100% - 4px); overflow-y: auto;
+    #panel { order: 2; width: clamp(170px, 26vw, 220px); flex-shrink: 0; max-height: calc(100% - 4px); overflow-y: auto;
       font-size: 13px; padding: 8px; gap: 6px; }
     #panel .row { flex-wrap: wrap; justify-content: center; gap: 6px; }
     #displays { gap: 8px; flex-wrap: wrap; justify-content: center; }
@@ -2181,6 +2184,13 @@ window.addEventListener('keydown', e => {
 });
 
 window.addEventListener('resize', resize);
+// 向きや大きさが変わったら、ページの位置を左上に戻す（ずれたままだと、タッチの位置と見た目がずれる）
+function resetPageScroll() { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); }
+window.addEventListener('resize', resetPageScroll);
+window.addEventListener('orientationchange', () => setTimeout(resetPageScroll, 300));
+// iPhone の2本指の拡大（ピンチ）と、ダブルタップの拡大を止める（拡大されるとタッチがずれたりスクロールに取られる）
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
 resize();
 creditCounter.jump(medals.credit);   // 起動時は回さずに表示
 renderMedals();

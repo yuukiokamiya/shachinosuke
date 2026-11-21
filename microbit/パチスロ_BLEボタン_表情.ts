@@ -18,36 +18,59 @@
 //    4. micro:bit V2 に書き込む
 //
 //  HuskyLens 2 は I2C でつなぎ、本体の「Protocol Type」を I2C にしておく。
-//  HuskyLens をつないでいなくても、ボタンはそのまま使える（表情は送られない）。
+//  HuskyLens をつないでいなくても、ボタンはそのまま使える（表情を送らないだけ）。
+//  あとから HuskyLens をつないでも、2秒ごとに探しているので見つかれば表情を送り始める。
 //
-//  LED：□ 待っている / ✓ つながった。押すたびに下の段の点がチカッと変わる
+//  LED
+//    □         Bluetooth でつながる前
+//    ✓         つながった（HuskyLens がない、または顔が映っていない）
+//    表情       顔が映っているとき（怒り・嫌悪・恐れ・喜び・ふつう・悲しみ・驚き）
+//    （HuskyLens がないときだけ、ボタンを押すと下の段の点がチカッと変わる）
 // =====================================================================
 
 let connected = false
 let huskyReady = false
 let lastExp = -1
 let lastExpSent = 0
+let lastIcon = -1
+
+// ---- LED：表情の番号でアイコンを変える（0 は ✓） ----
+function showExpIcon(id: number) {
+    if (id == lastIcon) return
+    lastIcon = id
+    // 第2引数の 0 は「表示したあと待たない」。待つと表情の送信が遅れる
+    if (id == 1) basic.showIcon(IconNames.Angry, 0)
+    else if (id == 2) basic.showIcon(IconNames.Confused, 0)
+    else if (id == 3) basic.showIcon(IconNames.Ghost, 0)
+    else if (id == 4) basic.showIcon(IconNames.Happy, 0)
+    else if (id == 5) basic.showIcon(IconNames.Meh, 0)
+    else if (id == 6) basic.showIcon(IconNames.Sad, 0)
+    else if (id == 7) basic.showIcon(IconNames.Surprised, 0)
+    else basic.showIcon(IconNames.Yes, 0)
+}
 
 // ---- Bluetooth とボタン（HuskyLens より先に準備する） ----
 bluetooth.startUartService()
-basic.showIcon(IconNames.Square)
+basic.showIcon(IconNames.Square, 0)
 
 bluetooth.onBluetoothConnected(function () {
     connected = true
     lastExp = -1          // つながったらすぐ表情を送り直す
-    basic.showIcon(IconNames.Yes)
+    lastIcon = -1
+    showExpIcon(0)        // ✓（顔が映れば表情のアイコンに変わる）
 })
 
 bluetooth.onBluetoothDisconnected(function () {
     connected = false
-    basic.showIcon(IconNames.Square)
+    lastIcon = -1
+    basic.showIcon(IconNames.Square, 0)
 })
 
 // つながっているときだけ送る。x は押したことを LED の下の段で知らせる位置
 function sendButton(name: string, x: number) {
     if (!connected) return
     bluetooth.uartWriteLine("BTN," + name)
-    led.toggle(x, 4)
+    if (!huskyReady) led.toggle(x, 4)   // 表情のアイコンを出しているときは崩さない
 }
 
 // 「押した瞬間」に送る（onButtonPressed は離したときに動くので、目押しが遅れる）
@@ -62,9 +85,12 @@ input.onLogoEvent(TouchButtonEvent.Touched, function () {
 })
 
 // ---- HUSKYLENS 2：表情認識 ----
-// I2CInit は HuskyLens が見つかるまで待ち続けるので、ボタンの準備のあとに置く
-huskylens2.I2CInit()
-huskylens2.switchAlgorithm(huskylens2.Algorithm.AlgorithmEmotionRecognition)
+// 拡張機能の I2CInit は「見つかるまで LED に ✕ を点滅させ続ける」ので使わず、
+// 2秒ごとに静かに探す（見つからなくても LED と Bluetooth はそのまま使える）
+while (!huskylens2.beginInternal()) {
+    basic.pause(2000)
+}
+huskylens2.switchAlgorithm(huskylens2.Algorithm.AlgorithmEmotionRecognition)   // 切り替えに約5秒かかる
 huskyReady = true
 
 basic.forever(function () {
@@ -77,6 +103,7 @@ basic.forever(function () {
     if (huskylens2.availableEmotionRecognition()) {
         exp = huskylens2.cachedCenterEmotionResult(huskylens2.BasePropertyId.Id)
     }
+    showExpIcon(exp)
     // 表情が変わったとき、または1秒たったときに送る（届き続けることで「つながっている」と伝える）
     if (exp != lastExp || control.millis() - lastExpSent > 1000) {
         bluetooth.uartWriteLine("EXP," + exp)

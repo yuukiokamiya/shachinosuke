@@ -201,6 +201,9 @@
   .small { border: none; border-radius: 8px; padding: 6px 12px; font-weight: bold; font-size: 0.75em; color: #fff; background: #555; }
   .small.pressed { transform: translateY(2px); }
   #lendBtn { background: #2e7d32; }
+  /* micro:bit との Bluetooth 接続ボタン：未接続＝灰色、接続中＝青、つないでいる途中＝点滅 */
+  #bleBtn.connecting { background: #1565c0; animation: autoBlink 0.8s infinite; }
+  #bleBtn.connected { background: #1565c0; box-shadow: 0 0 10px #42a5f5; }
   #settleBtn { background: #6d4c41; }
 </style>
 </head>
@@ -224,6 +227,7 @@
         <button class="small" id="soundBtn" aria-label="音のオンオフ">🔊</button>
         <button class="small" id="graphBtn" aria-label="スランプグラフ">📈</button>
         <button class="small" id="tickerBtn" aria-label="説明のスクロール表示のオンオフ">ℹ</button>
+        <button class="small" id="bleBtn" aria-label="micro:bit と Bluetooth でつなぐ">BLE</button>
       </div>
     </div>
   </div>
@@ -1957,6 +1961,108 @@ function setTicker(on) {
 bindPress(document.getElementById('tickerBtn'), () => setTicker(tickerEl.classList.contains('hidden')));
 window.addEventListener('resize', startTicker);
 setTicker((() => { try { return localStorage.getItem(TICKER_KEY) !== '0'; } catch (e) { return true; } })());
+
+// ---- micro:bit と Bluetooth（BLE）でつなぐ ----
+//  micro:bit の UART サービス（bluetooth 拡張）から、1行ずつ短い文字が届く。
+//   例）"BTN,A"  "BTN,B"  "BTN,LOGO"  （あとで "BTN,P0" や HuskyLens の "EXP,4" なども足せる形）
+//  iPhone/iPad の Safari は Web Bluetooth に対応していないので、Bluefy で開く。
+const UART_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const UART_TX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';   // micro:bit → こちら（通知）
+const UART_RX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // こちら → micro:bit（書き込み）
+const bleBtn = document.getElementById('bleBtn');
+let bleDevice = null, bleRx = null, bleBuffer = '';
+
+// 届いたボタンを、どの操作にするか（ボタンをつなぎ替えたらここを変える）
+//  A は「リールが止まっていればレバー、回っていれば左の停止」
+const BLE_BUTTON_ACTION = {
+  A: () => (canOperate() ? pullLever() : pressStopFromBle(0)),
+  LOGO: () => pressStopFromBle(1),
+  B: () => pressStopFromBle(2),
+  P0: () => pressStopFromBle(0),
+  P1: () => pressStopFromBle(1),
+  P2: () => pressStopFromBle(2),
+  LEVER: () => pullLever(),
+};
+
+// 画面の停止ボタンを押したときと同じ動き＋ボタンが沈む見た目
+function pressStopFromBle(i) {
+  pressStop(i);
+  const b = stopBtns[i];
+  b.classList.add('pressed');
+  setTimeout(() => b.classList.remove('pressed'), 150);
+}
+
+function handleMicrobitLine(line) {
+  const [kind, value] = line.trim().split(',');
+  if (kind === 'BTN' && BLE_BUTTON_ACTION[value]) {
+    Sound.unlock();
+    BLE_BUTTON_ACTION[value]();
+  }
+  // ここに HuskyLens などの受信（例: kind === 'EXP'）を足していく
+}
+
+function onBleData(e) {
+  bleBuffer += new TextDecoder().decode(e.target.value);
+  let i;
+  while ((i = bleBuffer.indexOf('\n')) >= 0) {   // 1行（改行まで）ずつ取り出す
+    const line = bleBuffer.slice(0, i).replace(/\r$/, '');
+    bleBuffer = bleBuffer.slice(i + 1);
+    if (line) handleMicrobitLine(line);
+  }
+}
+
+function setBleState(state, name = '') {
+  bleBtn.classList.remove('connecting', 'connected');
+  if (state !== 'off') bleBtn.classList.add(state);
+  bleBtn.textContent = state === 'connected' ? 'BLE●' : 'BLE';
+  bleBtn.title = state === 'connected' ? `${name} に接続中（押すと切断）` : 'micro:bit と Bluetooth でつなぐ';
+}
+
+function onBleDisconnected() {
+  bleRx = null; bleBuffer = '';
+  setBleState('off');
+  resultEl.textContent = 'micro:bit との接続が切れました（BLE ボタンでつなぎ直せます）';
+}
+
+async function connectMicrobit() {
+  if (!navigator.bluetooth) {
+    resultEl.textContent = 'このブラウザは Bluetooth に対応していません（iPhone/iPad は Bluefy で開いてください）';
+    return;
+  }
+  try {
+    setBleState('connecting');
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'BBC micro:bit' }],
+      optionalServices: [UART_SERVICE],
+    });
+    bleDevice.addEventListener('gattserverdisconnected', onBleDisconnected);
+    const server = await bleDevice.gatt.connect();
+    const service = await server.getPrimaryService(UART_SERVICE);
+    const tx = await service.getCharacteristic(UART_TX);
+    await tx.startNotifications();
+    tx.addEventListener('characteristicvaluechanged', onBleData);
+    bleRx = await service.getCharacteristic(UART_RX);
+    setBleState('connected', bleDevice.name);
+    resultEl.textContent = `${bleDevice.name} とつながりました`;
+  } catch (err) {
+    setBleState('off');
+    if (err && err.name === 'NotFoundError') resultEl.textContent = 'micro:bit を選ばずに閉じました';
+    else resultEl.textContent = `つなげませんでした（${err && err.message ? err.message : err}）`;
+  }
+}
+
+// こちら → micro:bit に1行送る（あとで LED 表示などに使う）
+async function sendToMicrobit(text) {
+  if (!bleRx) return;
+  try { await bleRx.writeValue(new TextEncoder().encode(text + '\n')); } catch (e) { /* 送れなくても遊びは続ける */ }
+}
+
+setBleState('off');
+// Bluetooth の接続画面は「クリック」の操作からしか開けない決まりがあるので、ここだけ click で受ける
+bleBtn.addEventListener('click', () => {
+  if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+  else connectMicrobit();
+});
 stopBtns.forEach((b, i) => bindPress(b, () => pressStop(i)));
 
 // PCでの確認用キーボード操作: Space=レバー（自動ベット）, Z/X/C または ←↓→ = 停止

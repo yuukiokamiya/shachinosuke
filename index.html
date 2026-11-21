@@ -1977,7 +1977,7 @@ let bleDevice = null, bleRx = null, bleBuffer = '';
 // 届いたボタンを、どの操作にするか（ボタンをつなぎ替えたらここを変える）
 //  A は「リールが止まっていればレバー、回っていれば左の停止」
 const BLE_BUTTON_ACTION = {
-  A: () => (canOperate() ? pullLever() : pressStopFromBle(0)),
+  A: () => bleLeverOrLeftStop(),
   LOGO: () => pressStopFromBle(1),
   B: () => pressStopFromBle(2),
   P0: () => pressStopFromBle(0),
@@ -1994,9 +1994,40 @@ function pressStopFromBle(i) {
   setTimeout(() => b.classList.remove('pressed'), 150);
 }
 
+// A ボタン：リールが止まっていればレバー、回っていれば左の停止。
+//  払い出しの途中なら、払い出しが終わったところでレバーを入れる。入らないときは理由を出す
+let bleLeverPending = false;
+function bleLeverOrLeftStop() {
+  if (reels.some(r => r.state !== 'stopped')) { pressStopFromBle(0); return; }
+  if (!canOperate()) {                       // リールは止まっているが払い出しの途中
+    if (!bleLeverPending) {
+      bleLeverPending = true;
+      const wait = setInterval(() => {
+        if (canOperate()) { clearInterval(wait); bleLeverPending = false; bleLever(); }
+      }, 50);
+    }
+    return;
+  }
+  bleLever();
+}
+function bleLever() {
+  const g = medals.games;
+  pullLever();
+  if (medals.games === g && !resultEl.textContent) resultEl.textContent = 'レバーが入りませんでした';
+}
+
+// 受け取った文字を BLE ボタンに一瞬出す（届いているかの確認用）
+let bleFlashTimer = null;
+function flashBleReceived(value) {
+  bleBtn.textContent = `BLE ${value}`;
+  clearTimeout(bleFlashTimer);
+  bleFlashTimer = setTimeout(() => { if (bleBtn.classList.contains('connected')) bleBtn.textContent = 'BLE●'; }, 400);
+}
+
 function handleMicrobitLine(line) {
   const [kind, value] = line.trim().split(',');
   if (kind === 'BTN' && BLE_BUTTON_ACTION[value]) {
+    flashBleReceived(value);
     Sound.unlock();
     BLE_BUTTON_ACTION[value]();
   }

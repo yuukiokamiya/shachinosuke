@@ -1464,6 +1464,13 @@ const SPEECH = {
   MOOD_RATE: 0.2,   // ④のうち、差枚に応じたセリフを出す割合（たまに）
   MINUS: ['あかんす', 'こんなもんすね', '海・・'],
   PLUS: ['いい感じっす', '今日は飲みっす', '肉食べるっす', 'やるっち！'],
+  // HUSKYLENS 2 がつながっているときの表情のセリフ（②の熱いセリフがないゲームで使う）
+  //  role = そのゲームで小役（ベル・オレンジ・チェリー・リプレイ）が成立しているとき
+  HUSKY: {
+    happy: { none: ['ご機嫌ね～', 'いいことあった？'], role: ['キタ！？', 'なんか来てる？'] },
+    down: { none: ['しょ、しょんぼり', '元気出そう'], role: ['ここからっす！', 'いくっす！'] },
+    neutral: { none: ['今日もお疲れっす', '頑張るっす', 'しゃちのすけっす'], role: ['今日もお疲れっす', '頑張るっす', 'しゃちのすけっす'] },
+  },
 };
 const bubbleEl = document.getElementById('bubble');
 let lastSpeech = '';
@@ -1517,6 +1524,11 @@ function speak(heldFlag, info) {
   let text = null;
   if (heldFlag) text = BONUS_SPEECH[heldFlag];                        // ①
   else if (logic.hot) text = pickHotLine(logic.hot);                 // ②
+  const mood = huskyMood();
+  if (!text && mood) {                                               // HuskyLens がつながっていれば表情のセリフ
+    const role = !logic.inBonusNow && ['BELL', 'ORANGE', 'CHERRY', 'REPLAY'].includes(info.smallFlag);
+    text = pickLine(SPEECH.HUSKY[mood][role ? 'role' : 'none']);
+  }
   if (!text && !heldFlag && !logic.inBonusNow && info.smallFlag === 'ORANGE') {   // ③
     const r = Math.random();
     let acc = 0;
@@ -2027,9 +2039,31 @@ function handleMicrobitLine(line) {
   if (kind === 'BTN' && BLE_BUTTON_ACTION[value]) {
     Sound.unlock();
     BLE_BUTTON_ACTION[value]();
+  } else if (kind === 'EXP') {
+    // HUSKYLENS 2 の表情（1 怒り / 2 嫌悪 / 3 恐れ / 4 喜び / 5 ふつう / 6 悲しみ / 7 驚き / 0 顔が無い）
+    huskyExp = Number(value) || 0;
+    huskyLastAt = performance.now();
+    renderHuskyState();
   }
-  // ここに HuskyLens などの受信（例: kind === 'EXP'）を足していく
 }
+
+// ---- HUSKYLENS 2 の表情 ----
+//  EXP が HUSKY_TIMEOUT ミリ秒以内に届いていれば「HuskyLens がつながっている」と考える
+const HUSKY_TIMEOUT = 3000;
+const HUSKY_FACE = { 1: '😠', 6: '😢', 4: '😊' };   // BLE ボタンに出す今の表情（それ以外は 🙂）
+let huskyExp = 0, huskyLastAt = -Infinity;
+function huskyConnected() { return performance.now() - huskyLastAt < HUSKY_TIMEOUT; }
+function huskyMood() {
+  if (!huskyConnected()) return null;
+  if (huskyExp === 4) return 'happy';
+  if (huskyExp === 1 || huskyExp === 6) return 'down';
+  return 'neutral';
+}
+function renderHuskyState() {
+  if (!bleBtn.classList.contains('connected')) return;
+  bleBtn.textContent = huskyConnected() ? `BLE●${HUSKY_FACE[huskyExp] || '🙂'}` : 'BLE●';
+}
+setInterval(renderHuskyState, 1000);   // 届かなくなったら表情の表示を消す
 
 function onBleData(e) {
   bleBuffer += new TextDecoder().decode(e.target.value);

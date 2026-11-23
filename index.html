@@ -113,6 +113,32 @@
   #graphTip { position: absolute; pointer-events: none; display: none; background: #2a2a28; color: #f0efec; font-size: 13px;
     padding: 4px 8px; border-radius: 6px; border: 1px solid #555; white-space: nowrap; }
 
+  /* 帰宅の結果 */
+  #homeModal { position: fixed; inset: 0; background: #000c; display: none; align-items: center; justify-content: center; z-index: 60; }
+  #homeModal.open { display: flex; }
+  .home-box { width: min(92vw, 640px); max-height: 94vh; overflow: auto; background: #10233a; border: 3px solid #c9a640; border-radius: 16px;
+    padding: 14px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 10px 40px #000c; }
+  .home-title { color: #ffd84a; font-weight: 900; font-size: clamp(18px, 3.5vh, 26px); }
+  .home-main { display: flex; align-items: flex-end; gap: 14px; width: 100%; justify-content: center; }
+  #homeChara { height: min(32vh, 220px); filter: drop-shadow(0 6px 12px #000a); }
+  .home-right { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+  #homeBubble { position: relative; background: #fff; color: #1b1b2b; font-weight: 900; text-align: center;
+    font-size: clamp(16px, 3.4vh, 26px); line-height: 1.4; padding: 0.5em 1em; border-radius: 1em; box-shadow: 0 4px 12px #0009; }
+  #homeBubble::after { content: ''; position: absolute; left: -14px; bottom: 18px;
+    border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-right: 16px solid #fff; }
+  #homeDiff { font-weight: 900; font-size: clamp(28px, 7vh, 52px); text-shadow: 0 2px 6px #000; white-space: nowrap; }
+  #homeDiff.plus { color: #ffd84a; }
+  #homeDiff.minus { color: #7fb2ff; }
+  #homeDetail { color: #c3c2b7; font-size: clamp(12px, 2vh, 15px); text-align: center; }
+  #homeClose { font-size: 17px; padding: 9px 26px; background: #2e7d32; }
+  /* 幅の狭い画面（iPhone 縦向き）：しゃちおっすの下に吹き出しと差枚を並べる */
+  @media (max-width: 600px) {
+    .home-main { flex-direction: column; align-items: center; gap: 16px; }
+    #homeChara { height: min(24vh, 180px); }
+    #homeBubble::after { left: 50%; top: -14px; bottom: auto; transform: translateX(-50%);
+      border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 0; border-bottom: 16px solid #fff; }
+  }
+
   /* 記念撮影 */
   #photoModal { position: fixed; inset: 0; background: #000d; display: none; align-items: center; justify-content: center; z-index: 60; }
   #photoModal.open { display: flex; }
@@ -324,7 +350,7 @@
       <div id="stats"></div>
       <div>
         <button class="small" id="lendBtn">貸出 50枚</button>
-        <button class="small" id="settleBtn">精算</button>
+        <button class="small" id="settleBtn">帰宅</button>
         <button class="small icon" id="soundBtn" aria-label="音のオンオフ"></button>
         <button class="small icon" id="graphBtn" aria-label="スランプグラフ"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M6 15l4-5 4 3 6-7"/></svg></button>
         <button class="small icon" id="tickerBtn" aria-label="説明のスクロール表示のオンオフ"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6"/><circle cx="12" cy="7.2" r="0.6" class="dot"/></svg></button>
@@ -385,6 +411,22 @@
       <span id="graphSummary"></span>
       <button class="small" id="graphReset">記録をリセット</button>
     </div>
+  </div>
+</div>
+
+<!-- 帰宅（結果を見せて、すべて0に戻す） -->
+<div id="homeModal" role="dialog" aria-label="帰宅">
+  <div class="home-box">
+    <div class="home-title">今日の結果</div>
+    <div class="home-main">
+      <img id="homeChara" alt="しゃちおっす">
+      <div class="home-right">
+        <div id="homeBubble"></div>
+        <div id="homeDiff"></div>
+        <div id="homeDetail"></div>
+      </div>
+    </div>
+    <button class="small" id="homeClose">また来るっす</button>
   </div>
 </div>
 
@@ -1037,12 +1079,47 @@ function lend() {
   renderMedals();
 }
 
-// 精算：クレジット（と、メダルで掛けたベット）を手持ちに戻す
-function settle() {
+// ---- 帰宅：今日の差枚としゃちおっすのひとことを見せて、メダルも記録もすべて0に戻す ----
+//  差枚に応じたひとこと（上から順に、当てはまった最初のもの）
+const HOME_LINES = [
+  { min: 3000, text: 'ご、豪遊するっす！！' },
+  { min: 2000, text: '銀座に行くっす' },
+  { min: 1000, text: 'ジャケット買うっす！' },
+  { min: 500, text: '焼肉いくっす！' },
+  { min: 0, text: 'また遊ぶっす' },
+  { min: -Infinity, text: '今度は頑張るっす！' },
+];
+function goHome() {
   if (!canOperate()) return;
-  if (!replayBet) { medals.hand += bet; bet = 0; }
-  medals.hand += medals.credit;
-  medals.credit = 0;
+  if (!confirm('帰宅しますか？\nメダル（手持ち・投資・クレジット）とゲーム数、スランプグラフ、ボーナス回数がすべて0になります。')) return;
+  setAuto(null);
+  const diff = currentDiff();
+  const games = medals.games, invest = medals.invest, c = medals.counts;
+  const line = HOME_LINES.find(l => diff >= l.min).text;
+
+  // 結果を見せる
+  document.getElementById('homeChara').src = charaEl.src;
+  document.getElementById('homeBubble').innerHTML = `お疲れっす！<br>${line}`;
+  const diffEl = document.getElementById('homeDiff');
+  diffEl.textContent = `差枚 ${diff > 0 ? '+' : ''}${diff.toLocaleString()}枚`;
+  diffEl.className = diff >= 0 ? 'plus' : 'minus';
+  document.getElementById('homeDetail').textContent =
+    `${games}G　投資 ${invest}枚　青7 BIG ${c.BIG_BLUE}回　赤7 BIG ${c.BIG_RED}回　REG ${c.REG}回　最大青7ループ ${c.maxLoop}連`;
+  document.getElementById('homeModal').classList.add('open');
+  showSpeech('お疲れっす！');
+
+  // すべて0に戻す（ゲームの状態も最初から）
+  const fresh = new SlotLogic();
+  for (const k of LOGIC_KEYS) logic[k] = fresh[k];
+  Object.assign(medals, { credit: 0, hand: 0, invest: 0, games: 0, history: [], flagHistory: [] });
+  resetCounts();
+  bet = 0; replayBet = false; payQueue = 0; payShown = 0;
+  Sound.stopMusic();
+  renderFlagHistory();
+  updatePaytableHighlight();
+  updateFrameGlow();
+  showChanceGuide(null);
+  resultEl.textContent = '貸出ボタンでメダルを借りてください';
   renderMedals();
 }
 
@@ -1875,7 +1952,8 @@ async function autoLoop() {
 bindPress(autoBtn, () => toggleAuto('hot'));
 bindPress(chanceBtn, () => toggleAuto('chance'));
 bindPress(lendBtn, lend);
-bindPress(settleBtn, settle);
+settleBtn.addEventListener('click', goHome);   // 確認ダイアログを出すので、タップ（click）で開く
+document.getElementById('homeClose').addEventListener('click', () => document.getElementById('homeModal').classList.remove('open'));
 // 音のオンオフ（状態はブラウザに保存）
 const soundBtn = document.getElementById('soundBtn');
 // 白いピクトグラム：スピーカー＋音の波（オン） / スピーカー＋✕（オフ）

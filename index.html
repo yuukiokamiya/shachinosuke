@@ -65,7 +65,7 @@
     color: #ffd84a; font-weight: bold; font-size: 14px; line-height: 1; }
 
   /* チャンスの場面でリール枠を光らせる
-     赤7チャンス・青7チャンス：蛍のようにゆっくり明滅 / しゃちのすけチャンス：紫で高速点滅 */
+     赤7チャンス・青7チャンス：蛍のようにゆっくり明滅 / しゃちおっすチャンス：紫で高速点滅 */
   #frame.glow-red { animation: fireflyRed 1.8s ease-in-out infinite; }
   #frame.glow-blue, #frame.glow-loop { animation: fireflyBlue 1.8s ease-in-out infinite; }
   #frame.glow-purple { animation: flashPurple 0.22s steps(1, end) infinite; }
@@ -126,7 +126,7 @@
   #photoCount { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
     font-size: min(30vh, 220px); font-weight: 900; color: #fff; text-shadow: 0 0 20px #000, 0 0 40px #ff4081; }
   #photoCount.tick { animation: pop 0.5s ease-out; }
-  /* HuskyLens で笑顔を待つ間、右下にしゃちのすけと吹き出しを出す */
+  /* HuskyLens で笑顔を待つ間、右下にしゃちおっすと吹き出しを出す */
   #photoChara { position: absolute; right: 2%; bottom: 0; height: 45%; display: none; flex-direction: column;
     align-items: center; pointer-events: none; }
   #photoChara.show { display: flex; }
@@ -253,6 +253,12 @@
   .small { border: none; border-radius: 8px; padding: 6px 12px; font-weight: bold; font-size: 0.75em; color: #fff; background: #555; }
   .small.pressed { transform: translateY(2px); }
   #lendBtn { background: #2e7d32; }
+  /* アイコンのボタン：灰色の地に白い線のピクトグラム */
+  .small.icon { padding: 4px 9px; vertical-align: middle; }
+  .small.icon svg { display: block; width: 1.6em; height: 1.6em; fill: none; stroke: #fff; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .small.icon svg .fill, .small.icon svg .dot { fill: #fff; }
+  .small.icon svg .dot { stroke-width: 1.5; }
   /* micro:bit との Bluetooth 接続ボタン：未接続＝灰色、接続中＝青、つないでいる途中＝点滅 */
   #bleBtn.connecting { background: #1565c0; animation: autoBlink 0.8s infinite; }
   #bleBtn.connected { background: #1565c0; box-shadow: 0 0 10px #42a5f5; }
@@ -281,7 +287,7 @@
     #machine { flex-direction: row; align-items: center; gap: 1.5vw;
       padding: 4px var(--padX) var(--padB) var(--padX); }
     #stage { row-gap: 8px; }
-    /* 配当表：iPad と同じ「図柄3つ、その下に名前と枚数」。そのぶんしゃちのすけを少し小さく */
+    /* 配当表：iPad と同じ「図柄3つ、その下に名前と枚数」。そのぶんしゃちおっすを少し小さく */
     :root { --CHARA: 0.38; }
     #paytable { gap: 2px; font-size: max(9px, calc(var(--H) * 0.045)); }
     .pt-row { padding: 1px 0; gap: 0; }
@@ -319,11 +325,11 @@
       <div>
         <button class="small" id="lendBtn">貸出 50枚</button>
         <button class="small" id="settleBtn">精算</button>
-        <button class="small" id="soundBtn" aria-label="音のオンオフ">🔊</button>
-        <button class="small" id="graphBtn" aria-label="スランプグラフ">📈</button>
-        <button class="small" id="tickerBtn" aria-label="説明のスクロール表示のオンオフ">ℹ</button>
+        <button class="small icon" id="soundBtn" aria-label="音のオンオフ"></button>
+        <button class="small icon" id="graphBtn" aria-label="スランプグラフ"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M6 15l4-5 4 3 6-7"/></svg></button>
+        <button class="small icon" id="tickerBtn" aria-label="説明のスクロール表示のオンオフ"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6"/><circle cx="12" cy="7.2" r="0.6" class="dot"/></svg></button>
         <button class="small" id="bleBtn" aria-label="micro:bit と Bluetooth でつなぐ">BLE</button>
-        <button class="small" id="photoBtn" aria-label="記念撮影">📷</button>
+        <button class="small icon" id="photoBtn" aria-label="記念撮影"><svg viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h2.5l1.5-2h6l1.5 2H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.8"/></svg></button>
       </div>
     </div>
   </div>
@@ -344,7 +350,7 @@
         </div>
       </div>
       <div id="bubble">しょうちのすけ</div>
-      <img id="chara" alt="しゃちのすけ">
+      <img id="chara" alt="しゃちおっす">
     </div>
     <div id="frame"><canvas id="reels"></canvas><div id="cutin"><img alt=""></div>
       <div id="ticker"><span id="tickerText"></span></div>
@@ -354,7 +360,7 @@
       <button id="lever" aria-label="レバー"><span class="lv-base"></span><span class="lv-arm"><span class="lv-knob"></span></span></button>
       <div id="autoBtns">
         <button id="autoBtn" aria-label="熱い場面までオートプレイ">AUTO</button>
-        <button id="chanceBtn" aria-label="しゃちのすけチャンスまでオートプレイ">CHANCE</button>
+        <button id="chanceBtn" aria-label="しゃちおっすチャンスまでオートプレイ">CHANCE</button>
       </div>
     </div>
     <div id="stops">
@@ -389,12 +395,12 @@
       <video id="photoVideo" playsinline muted autoplay></video>
       <img id="photoResult" alt="記念写真">
       <div id="photoCount"></div>
-      <div id="photoChara"><div id="photoBubble"></div><img id="photoCharaImg" alt="しゃちのすけ"></div>
+      <div id="photoChara"><div id="photoBubble"></div><img id="photoCharaImg" alt="しゃちおっす"></div>
       <div id="photoFlash"></div>
     </div>
     <div id="photoMsg"></div>
     <div class="photo-foot">
-      <button class="small" id="photoShoot">📷 もう一度撮る</button>
+      <button class="small" id="photoShoot">もう一度撮る</button>
       <button class="small" id="photoClose">閉じる</button>
     </div>
   </div>
@@ -413,10 +419,10 @@
   const PAY_LIMIT = 15;// 1ゲームの最大払い出し
 
   // ---- 図柄コード ----------------------------------------------------
-  //  R=リプレイ  B=ベル  7=赤7  F=青7(しゃちのすけ / 画像 frog7.png)  O=オレンジ
+  //  R=リプレイ  B=ベル  7=赤7  F=青7(しゃちおっす / 画像 blue7.png)  O=宝箱（内部の名前は ORANGE のまま）
   //  C=チェリー  P=花    W=ブルー  X=BAR
   const SYMBOL_NAMES = {
-    R: 'リプレイ', B: 'ベル', '7': '赤7', F: '青7', O: 'オレンジ',
+    R: 'リプレイ', B: 'ベル', '7': '赤7', F: '青7', O: '宝箱',
     C: 'チェリー', P: '花', W: 'ブルー', X: 'BAR',
   };
 
@@ -446,11 +452,11 @@
     { id: 'REG',    flag: 'REG',    name: 'REGULAR BONUS', pat: ['X', 'X', 'X'], pay: 0 },
     { id: 'REPLAY', flag: 'REPLAY', name: 'リプレイ',       pat: ['RW', 'R', 'R'], pay: 0 },
     { id: 'BELL',   flag: 'BELL',   name: 'ベル',           pat: ['B', 'B', 'B'], pay: 1 },
-    { id: 'ORANGE', flag: 'ORANGE', name: 'オレンジ',       pat: ['O', 'O', 'O'], pay: 1 },
+    { id: 'ORANGE', flag: 'ORANGE', name: '宝箱',       pat: ['O', 'O', 'O'], pay: 1 },
     { id: 'CHERRY', flag: 'CHERRY', name: 'チェリー',       pat: ['CP', '*', '*'], pay: 1 },
     // ボーナス中専用役（通常時は絶対にそろえない）
-    { id: 'B_FOW',  flag: 'BONUS_ONLY', name: '青7-オレンジ-ブルー', pat: ['F', 'O', 'W'], pay: 15 },
-    { id: 'B_FOO',  flag: 'BONUS_ONLY', name: '青7-オレンジ-オレンジ', pat: ['F', 'O', 'O'], pay: 6 },
+    { id: 'B_FOW',  flag: 'BONUS_ONLY', name: '青7-宝箱-ブルー', pat: ['F', 'O', 'W'], pay: 15 },
+    { id: 'B_FOO',  flag: 'BONUS_ONLY', name: '青7-宝箱-宝箱', pat: ['F', 'O', 'O'], pay: 6 },
     // 役ではないが、同じ図柄が並んで「そろった」ように見えてしまう目（絶対にそろえない）
     { id: 'NG_BLUE', flag: 'NEVER', name: 'ブルー揃い', pat: ['W', 'W', 'W'], pay: 0 },
     // 以前の REG の形。紛らわしいのでそろえない
@@ -463,7 +469,7 @@
   //  ボーナスは下の「ゲーム性」のルートからだけ発生させるので、直接抽選は入れていない。
   //  直接抽選も入れたいときは { flag: 'BIG_RED', n: 273 } のように足す。
   const FLAG_TABLE = [
-    { flag: 'REPLAY', n: 13107 }, // 1/5（しゃちのすけチャンスが来やすいように）
+    { flag: 'REPLAY', n: 13107 }, // 1/5（しゃちおっすチャンスが来やすいように）
     { flag: 'BELL',   n: 9362  }, // 約 1/7
     { flag: 'ORANGE', n: 2341  }, // 約 1/28
     { flag: 'CHERRY', n: 1638  }, // 約 1/40
@@ -481,18 +487,22 @@
   //  今の値で機械割 約105%（完璧な目押し）になるよう調整済み
   const CONFIG = {
     STREAK_TO_BONUS: 3,     // 同じ小役が何ゲーム連続で成立したら発動するか
-    CHERRY_TO_ORANGE: 0.73, // チェリー成立 → 次ゲームがオレンジになる確率
-    ORANGE_CHAIN: 0.68,     // オレンジ成立 → 次ゲームもオレンジになる確率
+    CHERRY_TO_ORANGE: 0.73, // チェリー成立 → 次ゲームが宝箱になる確率
+    ORANGE_CHAIN: 0.68,     // 宝箱成立 → 次ゲームも宝箱になる確率
     PREMIUM_LOOP: 0.8,      // プレミアム後、ボーナスが終わるたびに青7 BIG が続く確率
     // ボーナスゲーム：毎ゲームベルが成立して BONUS_PAY 枚。払い出しの合計が END を「超えたら」終了
     //  BIG_END 75 → 15枚×6ゲーム＝90枚（純増72枚）、REG_END 60 → 15枚×5ゲーム＝75枚（純増60枚）
-    //  通常時のベル・オレンジは1枚なので、出玉の大半はボーナスから
+    //  通常時のベル・宝箱は1枚なので、出玉の大半はボーナスから
     BONUS_PAY: 15,
     BIG_END: 75,
     REG_END: 60,
     // カットイン：小役が2連続した次のゲームのレバーONで抽選。割合は [なし, 弱, 強, 確定]
     CUTIN_HIT:  [1, 2, 5, 7],   // そのゲームで3連続が成立したとき
     CUTIN_MISS: [10, 4, 1, 0],  // 3連続が成立しなかったとき
+    // 青7ループチャンスのレバーON：必ずカットイン（なし・青・赤・雷）
+    //  ループ80%なので、青≒43%・赤≒85%・雷＝100% の信頼度
+    LOOP_CUTIN_HIT:  [0, 2, 5, 7],
+    LOOP_CUTIN_MISS: [0, 6, 2, 0],
   };
   const CUTIN_TYPES = [null, 'weak', 'strong', 'confirm'];
   const CUTIN_ROLES = ['BELL', 'ORANGE', 'REPLAY'];   // 3連で何か起きる小役だけ
@@ -509,7 +519,7 @@
 
   const FLAG_NAMES = {
     BIG_BLUE: '青7 BIG', BIG_RED: '赤7 BIG', REG: 'REG', REPLAY: 'リプレイ', BELL: 'ベル',
-    ORANGE: 'オレンジ', CHERRY: 'チェリー',
+    ORANGE: '宝箱', CHERRY: 'チェリー',
   };
 
   // ---- 共通関数 --------------------------------------------------------
@@ -621,8 +631,8 @@
       this.stops = [null, null, null];
       this.streakFlag = null;   // 連続成立を数えている小役
       this.streakCount = 0;     // その連続回数
-      this.forceOrange = false; // 次ゲームはオレンジ確定
-      this.chance = false;      // 次ゲームがしゃちのすけチャンス
+      this.forceOrange = false; // 次ゲームは宝箱確定
+      this.chance = false;      // 次ゲームがしゃちおっすチャンス
       this.loop = false;        // プレミアムの青7 BIG ループ中
       this.loopChance = false;  // 次のレバーONで青7ループ（PREMIUM_LOOP）を抽選する
       this.bonusGame = null;    // ボーナスゲーム中 { type, paid }（null なら通常）
@@ -655,14 +665,16 @@
       // 青7ループチャンス：ボーナスゲームが終わった次のレバーONで、PREMIUM_LOOP の確率で青7 BIG
       if (this.loopChance) {
         this.loopChance = false;
-        if (rand() < CONFIG.PREMIUM_LOOP) { this.bonusFlag = 'BIG_BLUE'; this.events.push('LOOP'); }
+        const loopHit = rand() < CONFIG.PREMIUM_LOOP;
+        if (loopHit) { this.bonusFlag = 'BIG_BLUE'; this.events.push('LOOP'); }
         else { this.loop = false; this.events.push('LOOP_END'); }
+        this.cutin = pickCutin(loopHit ? CONFIG.LOOP_CUTIN_HIT : CONFIG.LOOP_CUTIN_MISS, rand);
       }
       const heldAtStart = !!this.bonusFlag;
-      const orangeForced = !heldAtStart && this.forceOrange;   // このゲームはオレンジ確定だったか
+      const orangeForced = !heldAtStart && this.forceOrange;   // このゲームは宝箱確定だったか
       let f;
       if (this.bonusFlag) {
-        // ボーナス持ち越し中はリプレイだけを抽選（次オレンジの予約も消える）
+        // ボーナス持ち越し中はリプレイだけを抽選（次宝箱の予約も消える）
         f = lottery(rand, HELD_TABLE);
       } else if (this.forceOrange) {
         f = 'ORANGE'; this.events.push('ORANGE_FORCED');
@@ -675,7 +687,7 @@
       if (BONUS_FLAGS.includes(f)) { this.setBonus(f, 'BONUS_DIRECT'); f = null; }
       this.smallFlag = f;
 
-      // しゃちのすけチャンスのゲーム：小役が成立したらプレミアム（REG＋青7 BIG ループ）
+      // しゃちおっすチャンスのゲーム：小役が成立したらプレミアム（REG＋青7 BIG ループ）
       //  リプレイなら次のゲームもチャンス継続、ハズレなら終了
       if (this.chance) {
         this.chance = false;
@@ -707,7 +719,7 @@
         if (fired) { this.streakFlag = null; this.streakCount = 0; }
       }
 
-      // チェリー・オレンジ → 次ゲームのオレンジ
+      // チェリー・宝箱 → 次ゲームの宝箱
       if (f === 'CHERRY' && rand() < CONFIG.CHERRY_TO_ORANGE) this.forceOrange = true;
       if (f === 'ORANGE' && rand() < CONFIG.ORANGE_CHAIN) this.forceOrange = true;
 
@@ -826,7 +838,16 @@ const BET_MAX = 3;            // 1ゲームに必要な枚数（5ライン有効
 const LEND_UNIT = 50;         // 貸出ボタン1回の枚数
 const PAY_MAX = 15;           // 1ゲームの最大払い出し
 const PAYOUT_INTERVAL = 0.06; // 払い出し1枚ごとの間隔（秒）
-const SAVE_KEY = 'shachinosuke-medals';
+const SAVE_KEY = 'shachiossu-medals';
+
+// 改名前（shachinosuke-〜）の名前で保存された記録があれば、新しい名前へ引き継ぐ
+for (const k of ['medals', 'muted', 'ticker']) {
+  try {
+    const old = localStorage.getItem(`shachinosuke-${k}`);
+    if (old !== null && localStorage.getItem(`shachiossu-${k}`) === null) localStorage.setItem(`shachiossu-${k}`, old);
+    localStorage.removeItem(`shachinosuke-${k}`);
+  } catch (e) { /* 保存できない環境では何もしない */ }
+}
 
 // メダルの状態はブラウザに保存しておき、再読み込みしても続きから遊べるようにする
 function loadSaved() {
@@ -1161,9 +1182,9 @@ function updatePaytableHighlight() {
 //  index.html と同じ場所の symbols フォルダに下の名前で画像を置くと、その画像を使う。
 //  無い絵柄は標準の絵のまま。png 以外の拡張子も順に探す。
 // 画像を差し替えたらこの番号を上げる（ブラウザに残った古い画像を使わせないため）
-const ASSET_VERSION = 2;
+const ASSET_VERSION = 3;
 const SYMBOL_FILES = {
-  '7': 'red7', F: 'frog7', X: 'bar', R: 'replay', W: 'blue',
+  '7': 'red7', F: 'blue7', X: 'bar', R: 'replay', W: 'blue',
   B: 'bell', O: 'orange', C: 'cherry', P: 'flower',
 };
 const IMAGE_EXTS = ['png', 'webp', 'jpg', 'jpeg'];
@@ -1194,7 +1215,7 @@ for (const [sym, name] of Object.entries(SYMBOL_FILES)) loadSymbolImage(sym, nam
 //  画像の外周からつながっている「白〜明るい灰色」の部分を透明にしてから表示する。
 //  キャラは黒い輪郭で囲まれているので、白いお腹や目は消えない。
 //  本当に背景が透明な PNG に差し替えた場合は、この処理は何もしないのと同じになる。
-const CHARA_SRC = `shachinosuke.webp?v=${ASSET_VERSION}`;
+const CHARA_SRC = `shachiossu.webp?v=${ASSET_VERSION}`;
 const charaEl = document.getElementById('chara');
 
 function removeFakeBackground(img) {
@@ -1315,7 +1336,7 @@ function updateButtons() {
 // ---- 効果音（Web Audio で合成。音声ファイルは使わない） ----
 //  iPad では最初に画面を触ったときに音を使えるようにする必要があるので、unlock() を呼ぶ。
 const SOUND_VOLUME = 0.6;
-const MUTE_KEY = 'shachinosuke-muted';
+const MUTE_KEY = 'shachiossu-muted';
 const Sound = (() => {
   let ctx = null, master = null, noiseBuf = null;
   let muted = false;
@@ -1516,9 +1537,9 @@ window.addEventListener('keydown', unlockSound, true);
 //  表示中は停止ボタンを押せない（リールが隠れているため）。
 const CUTIN_MS = 1000;
 const CUTIN_IMAGES = {
-  weak: 'cutin/cutin_blue.png',
-  strong: 'cutin/cutin_red.png',
-  confirm: 'cutin/cutin_lightning.png',
+  weak: 'cutin/cutin_blue.jpg',
+  strong: 'cutin/cutin_red.jpg',
+  confirm: 'cutin/cutin_thunder.jpg',
 };
 const cutinEl = document.getElementById('cutin');
 const cutinImg = cutinEl.querySelector('img');
@@ -1542,10 +1563,10 @@ function showCutin(type) {
 // ゲーム性の出来事を画面に出す文
 const EVENT_TEXT = {
   BELL3: 'ベル3連！ 青7 BIG 確定',
-  ORANGE3: 'オレンジ3連！ 赤7 BIG 確定',
-  CHANCE: 'しゃちのすけチャンス！',
-  CHANCE_CONTINUE: 'リプレイ！ しゃちのすけチャンス継続',
-  CHANCE_MISS: 'しゃちのすけチャンス終了',
+  ORANGE3: '宝箱3連！ 赤7 BIG 確定',
+  CHANCE: 'しゃちおっすチャンス！',
+  CHANCE_CONTINUE: 'リプレイ！ しゃちおっすチャンス継続',
+  CHANCE_MISS: 'しゃちおっすチャンス終了',
   LOOP_CHANCE: '青７80%ループチャンス！',
   PREMIUM: 'プレミアム！！',
   LOOP: '青7 BIG 継続！',
@@ -1561,7 +1582,7 @@ function eventMessages() {
 }
 
 // ---- 吹き出しのセリフ ----
-//  優先順：①ボーナス持ち越し中 ②小役2連の次のゲーム（熱いセリフ） ③オレンジ成立 ④それ以外
+//  優先順：①ボーナス持ち越し中 ②小役2連の次のゲーム（熱いセリフ） ③宝箱成立 ④それ以外
 const SPEECH = {
   // ② 出たときに3連が成立する割合（信頼度）が決まっている熱いセリフ
   HOT: [
@@ -1569,24 +1590,26 @@ const SPEECH = {
     { text: 'しゃ！',       trust: 0.8, hitWeight: 0.4 },   // 80%
     { text: 'しゃ！？',     trust: 0.5, hitWeight: 0.3 },   // 50%
   ],
-  // ③ 通常時にオレンジが成立したとき（残りの10%は④）
+  // ③ 通常時に宝箱が成立したとき（残りの10%は④）
   ORANGE: [
     { text: 'しょうちのすけ！', rate: 0.7 },
     { text: 'むむ！？',         rate: 0.2 },
   ],
   // ④ それ以外
-  NORMAL: ['・・・', 'しゃ', 'しゃち', 'し'],
+  NORMAL: ['・・・', 'しゃ', 'しゃち', 'し', 'おいらはしゃちおっす！'],
+  // ボーナスゲーム中（毎ゲームこの中からランダム）
+  BONUS_GAME: ['しゃっ！', 'シャチックスー！', 'しゃっちー！', 'シャリンしゃりん！'],
   MOOD_RATE: 0.2,   // ④のうち、差枚に応じたセリフを出す割合（たまに）
   MINUS: ['あかんす', 'こんなもんすね', '海・・'],
   PLUS: ['いい感じっす', '今日は飲みっす', '肉食べるっす', 'やるっち！'],
   // HUSKYLENS 2 がつながっているときの表情のセリフ（②の熱いセリフがないゲームで使う）
   //  HUSKY_RATE の確率で表情のセリフ、残りは③④の今までのセリフ
-  //  role = そのゲームで小役（ベル・オレンジ・チェリー・リプレイ）が成立しているとき
+  //  role = そのゲームで小役（ベル・宝箱・チェリー・リプレイ）が成立しているとき
   HUSKY_RATE: 0.5,
   HUSKY: {
     happy: { none: ['ご機嫌ね～', 'いいことあった？'], role: ['キタ！？', 'なんか来てる？'] },
     down: { none: ['しょ、しょんぼり', '元気出そう'], role: ['ここからっす！', 'いくっす！'] },
-    neutral: { none: ['今日もお疲れっす', '頑張るっす', 'しゃちのすけっす'], role: ['今日もお疲れっす', '頑張るっす', 'しゃちのすけっす'] },
+    neutral: { none: ['今日もお疲れっす', '頑張るっす', 'しゃちおっす！'], role: ['今日もお疲れっす', '頑張るっす', 'しゃちおっす！'] },
   },
 };
 const bubbleEl = document.getElementById('bubble');
@@ -1623,7 +1646,7 @@ function pickLine(list) {
 //    不成立時は、信頼度がぴったりになる確率だけ出す（残りは普通のセリフ）。
 //    p = このゲームで3連になる確率。信頼度 t のセリフの不成立時の出現率 = p×hitWeight×(1−t) / ((1−p)×t)
 function pickHotLine(hot) {
-  // 必ず3連になるゲーム（オレンジ連鎖で次もオレンジ確定）は確定セリフだけ。
+  // 必ず3連になるゲーム（宝箱連鎖で次も宝箱確定）は確定セリフだけ。
   // ここで他のセリフを出すと、外れの無いデータが混ざって信頼度がずれるため。
   if (hot.p >= 1) return SPEECH.HOT.find(h => h.trust >= 1).text;
   const r = Math.random();
@@ -1640,6 +1663,7 @@ function pickHotLine(hot) {
 function speak(heldFlag, info) {
   let text = null;
   if (heldFlag) text = BONUS_SPEECH[heldFlag];                        // ①
+  else if (logic.inBonusNow) text = pickLine(SPEECH.BONUS_GAME);      // ボーナスゲーム中
   else if (logic.hot) text = pickHotLine(logic.hot);                 // ②
   const mood = huskyMood();
   if (!text && mood && Math.random() < SPEECH.HUSKY_RATE) {          // HuskyLens がつながっていれば、ときどき表情のセリフ
@@ -1782,16 +1806,16 @@ bindPress(leverBtn, pullLever);
 
 // ---- オートプレイ ----
 //  レバーと停止を自動で繰り返し、決めた場面になったら次のレバーの前で止まる。
-//   AUTO  （'hot'）  ：熱い場面まで（小役2連 / チェリー成立 / しゃちのすけチャンス / ボーナス確定）
-//   CHANCE（'chance'）：しゃちのすけチャンス（プレミアム REG＝BAR を狙えるゲーム）まで。ボーナス確定でも止まる
+//   AUTO  （'hot'）  ：熱い場面まで（小役2連 / チェリー成立 / しゃちおっすチャンス / ボーナス確定）
+//   CHANCE（'chance'）：しゃちおっすチャンス（プレミアム REG＝BAR を狙えるゲーム）まで。ボーナス確定でも止まる
 const AUTO_STOP_GAP = 180;   // 停止ボタンを押す間隔（ミリ秒）
 const AUTO_GAME_GAP = 250;   // 次のゲームまでの間（ミリ秒）
 const autoBtn = document.getElementById('autoBtn');
 const chanceBtn = document.getElementById('chanceBtn');
 let autoMode = null, autoRunning = false;   // autoMode: null / 'hot' / 'chance'
 const AUTO_STATUS_TEXT = {
-  hot: 'AUTO中：小役2連・チェリー・しゃちのすけチャンス・ボーナス確定で止まります（もう一度押すと停止）',
-  chance: 'CHANCE中：しゃちのすけチャンス（またはボーナス確定）まで自動で進みます（もう一度押すと停止）',
+  hot: 'AUTO中：小役2連・チェリー・しゃちおっすチャンス・ボーナス確定で止まります（もう一度押すと停止）',
+  chance: 'CHANCE中：しゃちおっすチャンス（またはボーナス確定）まで自動で進みます（もう一度押すと停止）',
 };
 
 // 今の状態で止まるべきなら理由を返す
@@ -1799,7 +1823,7 @@ function hotReason(mode = autoMode) {
   if (logic.bonusGame) return null;                       // ボーナスゲーム中はそのまま続ける
   if (logic.bonusFlag) return `${FLAG_NAMES[logic.bonusFlag]} 確定`;
   if (logic.loopChance) return '青7 80%ループチャンス';    // 次のレバーで抽選するので自分で叩く
-  if (logic.chance) return 'しゃちのすけチャンス';
+  if (logic.chance) return 'しゃちおっすチャンス';
   if (mode === 'chance') return null;                     // CHANCE はここまで
   if (['BELL', 'ORANGE', 'REPLAY'].includes(logic.streakFlag) && logic.streakCount === SlotLogicLib.CONFIG.STREAK_TO_BONUS - 1)
     return `${FLAG_NAMES[logic.streakFlag]}${logic.streakCount}連`;
@@ -1854,13 +1878,17 @@ bindPress(lendBtn, lend);
 bindPress(settleBtn, settle);
 // 音のオンオフ（状態はブラウザに保存）
 const soundBtn = document.getElementById('soundBtn');
-const renderSoundBtn = () => { soundBtn.textContent = Sound.isMuted() ? '🔇' : '🔊'; };
+// 白いピクトグラム：スピーカー＋音の波（オン） / スピーカー＋✕（オフ）
+const SPEAKER = '<path d="M4 9h4l5-4v14l-5-4H4z" class="fill"/>';
+const SOUND_ICON_ON = `<svg viewBox="0 0 24 24">${SPEAKER}<path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>`;
+const SOUND_ICON_OFF = `<svg viewBox="0 0 24 24">${SPEAKER}<path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>`;
+const renderSoundBtn = () => { soundBtn.innerHTML = Sound.isMuted() ? SOUND_ICON_OFF : SOUND_ICON_ON; };
 bindPress(soundBtn, () => { Sound.setMuted(!Sound.isMuted()); renderSoundBtn(); });
 renderSoundBtn();
 
 // ---- チャンスの場面でリール枠を光らせる ----
 //  ゲームが終わったときに判定し、次のチャンスのゲームの結果が出るまで光らせ続ける。
-//   オレンジ2連 → 赤7チャンス（赤） / ベル2連 → 青7チャンス（青） / リプレイ3連 → しゃちのすけチャンス（紫・高速）
+//   宝箱2連 → 赤7チャンス（赤） / ベル2連 → 青7チャンス（青） / リプレイ3連 → しゃちおっすチャンス（紫・高速）
 const frameEl = document.getElementById('frame');
 function chanceGlow() {
   if (logic.loopChance) return 'loop';                       // 青7 80%ループチャンス（青で点滅）
@@ -1874,9 +1902,9 @@ function chanceGlow() {
 }
 // チャンス中、レバーを叩くまでリール枠の上に出す説明
 const CHANCE_GUIDE_TEXT = {
-  red: '赤7チャンス！ オレンジが成立すれば赤7 BIG',
+  red: '赤7チャンス！ 宝箱が成立すれば赤7 BIG',
   blue: '青7チャンス！ ベルが成立すれば青7 BIG',
-  purple: 'しゃちのすけチャンス！ ベル・オレンジ・チェリーでプレミアムREG ／ リプレイなら継続',
+  purple: 'しゃちおっすチャンス！ ベル・宝箱・チェリーでプレミアムREG ／ リプレイなら継続',
   loop: '青７80%ループチャンス！',
 };
 const chanceGuideEl = document.getElementById('chanceGuide');
@@ -2093,7 +2121,7 @@ window.addEventListener('resize', () => { if (graphModal.classList.contains('ope
 // ---- 説明のスクロール表示（リール枠の上） ----
 //  ボーナスの条件と小役の確率を、設定の数値から文章にして流す
 const TICKER_SPEED = 70;   // 1秒あたりに流れるピクセル数
-const TICKER_KEY = 'shachinosuke-ticker';
+const TICKER_KEY = 'shachiossu-ticker';
 const tickerEl = document.getElementById('ticker');
 const tickerText = document.getElementById('tickerText');
 let tickerAnim = null;
@@ -2105,12 +2133,12 @@ function tickerMessage() {
   const n = C.STREAK_TO_BONUS;
   return [
     `【ボーナスの条件】ベル${n}連 → 青7 BIG`,
-    `オレンジ${n}連 → 赤7 BIG`,
-    `リプレイ${n}連 → しゃちのすけチャンス（ベル・オレンジ・チェリーならプレミアムREG、リプレイならチャンス継続、その後は${pct(C.PREMIUM_LOOP)}で青7 BIG ループ）`,
-    `チェリー成立 → ${pct(C.CHERRY_TO_ORANGE)}で次のゲームはオレンジ`,
-    `オレンジ成立 → ${pct(C.ORANGE_CHAIN)}で次のゲームもオレンジ`,
-    `【小役の確率】リプレイ ${prob('REPLAY')}　ベル ${prob('BELL')}　オレンジ ${prob('ORANGE')}　チェリー ${prob('CHERRY')}`,
-    `【配当】青7 BIG ${bonusPayout('BIG')}枚　赤7 BIG ${bonusPayout('BIG')}枚　REG（BAR） ${bonusPayout('REG')}枚　ベル・オレンジ 各1枚`,
+    `宝箱${n}連 → 赤7 BIG`,
+    `リプレイ${n}連 → しゃちおっすチャンス（ベル・宝箱・チェリーならプレミアムREG、リプレイならチャンス継続、その後は${pct(C.PREMIUM_LOOP)}で青7 BIG ループ）`,
+    `チェリー成立 → ${pct(C.CHERRY_TO_ORANGE)}で次のゲームは宝箱`,
+    `宝箱成立 → ${pct(C.ORANGE_CHAIN)}で次のゲームも宝箱`,
+    `【小役の確率】リプレイ ${prob('REPLAY')}　ベル ${prob('BELL')}　宝箱 ${prob('ORANGE')}　チェリー ${prob('CHERRY')}`,
+    `【配当】青7 BIG ${bonusPayout('BIG')}枚　赤7 BIG ${bonusPayout('BIG')}枚　REG（BAR） ${bonusPayout('REG')}枚　ベル・宝箱 各1枚`,
   ].join('　／　');
 }
 
@@ -2133,7 +2161,7 @@ window.addEventListener('resize', startTicker);
 setTicker((() => { try { return localStorage.getItem(TICKER_KEY) !== '0'; } catch (e) { return true; } })());
 
 // ---- 記念撮影（📷ボタン） ----
-//  前面カメラを映し、3・2・1 のカウントで撮影。カメラの写真に、しゃちのすけ・今のリール・
+//  前面カメラを映し、3・2・1 のカウントで撮影。カメラの写真に、しゃちおっす・今のリール・
 //  スランプグラフ・ゲーム数とボーナス回数を組み合わせた1枚の画像を作り、長押しで保存できるように表示する。
 //  カメラが使えない環境（許可しない・非対応）では、カメラの所を空けたまま作る。
 const PHOTO_W = 1600, PHOTO_H = 1000;
@@ -2311,7 +2339,7 @@ function composePhoto(withBg) {
   c.restore();
   goldBox(c, cam.x, cam.y, cam.w, cam.h, 24);
 
-  // しゃちのすけ（カメラの写真の右下に重ねる）と吹き出し
+  // しゃちおっす（カメラの写真の右下に重ねる）と吹き出し
   if (charaEl.complete && charaEl.naturalWidth) {
     const ch = 400, cw = ch * charaEl.naturalWidth / charaEl.naturalHeight;
     const cx = cam.x + cam.w - cw + 30, cy = cam.y + cam.h - ch + 40;
@@ -2343,7 +2371,7 @@ function composePhoto(withBg) {
   c.textAlign = 'center'; c.textBaseline = 'alphabetic';
   c.font = `900 46px ${PHOTO_FONT}`;
   c.fillStyle = '#ffd84a'; c.shadowColor = '#000'; c.shadowBlur = 10;
-  c.fillText('しゃちのすけ 記念撮影', R.x + R.w / 2, 92);
+  c.fillText('しゃちおっす 記念撮影', R.x + R.w / 2, 92);
   c.shadowBlur = 0;
   c.font = `bold 26px ${PHOTO_FONT}`; c.fillStyle = '#fff';
   const now = new Date();
